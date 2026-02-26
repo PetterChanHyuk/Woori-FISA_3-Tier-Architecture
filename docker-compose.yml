@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  card_data_source:
+    image: mysql:8.0
+    container_name: card_data_source
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+    ports:
+      - "13306:3306"
+    command: 
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+    volumes:
+      # 로컬의 dat 파일을 컨테이너 내부로 자동 마운트 (docker cp가 필요 없어짐)
+      - ./EDU_DATA_F.dat:/var/lib/mysql-files/EDU_DATA_F.dat
+    networks:
+      - mysql-network
+
+  card_data_replica:
+    image: mysql:8.0
+    container_name: card_data_replica
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+    ports:
+      - "13307:3306"
+    command: 
+      - --server-id=2
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --read-only=ON
+    networks:
+      - mysql-network
+
+networks:
+  mysql-network:
+    driver: bridge
