@@ -1,39 +1,50 @@
-version: '3.8'
+name: inno_cluster
 
 services:
-  card_data_source:
+  mysql1:
     image: mysql:8.0
-    container_name: card_data_source
-    environment:
-      MYSQL_ROOT_PASSWORD: "1234"
-    ports:
-      - "13306:3306"
-    command: 
-      - --server-id=1
-      - --log-bin=mysql-bin
-      - --gtid-mode=ON
-      - --enforce-gtid-consistency=ON
-    volumes:
-      # 로컬의 dat 파일을 컨테이너 내부로 자동 마운트 (docker cp가 필요 없어짐)
-      - ./EDU_DATA_F.dat:/var/lib/mysql-files/EDU_DATA_F.dat
-    networks:
-      - mysql-network
+    container_name: mysql1
+    environment: { MYSQL_ROOT_PASSWORD: "1234" }
+    command: ["--server-id=100", "--enforce-gtid-consistency=ON", "--gtid-mode=ON"]
 
-  card_data_replica:
+  mysql2:
     image: mysql:8.0
-    container_name: card_data_replica
-    environment:
-      MYSQL_ROOT_PASSWORD: "1234"
-    ports:
-      - "13307:3306"
-    command: 
-      - --server-id=2
-      - --gtid-mode=ON
-      - --enforce-gtid-consistency=ON
-      - --read-only=ON
-    networks:
-      - mysql-network
+    container_name: mysql2
+    environment: { MYSQL_ROOT_PASSWORD: "1234" }
+    command: ["--server-id=101", "--enforce-gtid-consistency=ON", "--gtid-mode=ON"]
 
-networks:
-  mysql-network:
-    driver: bridge
+  mysql3:
+    image: mysql:8.0
+    container_name: mysql3
+    environment: { MYSQL_ROOT_PASSWORD: "1234" }
+    command: ["--server-id=102", "--enforce-gtid-consistency=ON", "--gtid-mode=ON"]
+
+  # 첫 번째 라우터 (기본 6446, 6447 포트)
+  router1:
+    image: mysql/mysql-router:8.0
+    container_name: router1
+    environment:
+      MYSQL_HOST: mysql1
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: "1234"
+      MYSQL_CREATE_ROUTER_USER: 0
+    ports:
+      - "6446:6446"
+      - "6447:6447"
+    depends_on: [mysql1, mysql2, mysql3]
+
+  # 두 번째 라우터 (보조 7446, 7447 포트)
+  router2:
+    image: mysql/mysql-router:8.0
+    container_name: router2
+    environment:
+      MYSQL_HOST: mysql1
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: "1234"
+      MYSQL_CREATE_ROUTER_USER: 0
+    ports:
+      - "7446:6446"
+      - "7447:6447"
+    depends_on: [mysql1, mysql2, mysql3]

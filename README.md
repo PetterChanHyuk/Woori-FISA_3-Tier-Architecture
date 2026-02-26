@@ -24,18 +24,30 @@ flowchart TB
     end
 
     subgraph DATA ["🗄️ Data Tier (Docker)"]
-        Master["🔴 Master DB<br/>:13306<br/>Write Only"]
-        Replica["🟢 Replica DB<br/>:13307<br/>Read Only"]
+        subgraph ROUTER ["� MySQL Router"]
+            R1["Router #1<br/>:6446 (R/W) · :6447 (R/O)"]
+            R2["Router #2<br/>:7446 (R/W) · :7447 (R/O)"]
+        end
+        subgraph CLUSTER ["�️ InnoDB Cluster"]
+            M1["🔴 mysql1<br/>Primary (R/W)"]
+            M2["🟢 mysql2<br/>Secondary (R/O)"]
+            M3["🟢 mysql3<br/>Secondary (R/O)"]
+        end
     end
 
     Browser -->|"HTTP Request"| Nginx
     Nginx -->|"ip_hash 분배"| T1
     Nginx -->|"ip_hash 분배"| T2
-    T1 -->|"UPDATE/INSERT"| Master
-    T1 -->|"SELECT"| Replica
-    T2 -->|"UPDATE/INSERT"| Master
-    T2 -->|"SELECT"| Replica
-    Master -.->|"GTID Replication"| Replica
+    T1 -->|"R/W"| R1
+    T2 -->|"R/W"| R2
+    R1 -->|"Write"| M1
+    R1 -->|"Read"| M2
+    R1 -->|"Read"| M3
+    R2 -->|"Write"| M1
+    R2 -->|"Read"| M2
+    R2 -->|"Read"| M3
+    M1 <-.- M2
+    M1 <-.- M3
 ```
 
 ---
@@ -107,14 +119,40 @@ jdbc:mysql://host:port/card_db
   &prepStmtCacheSize=250      ← 최대 250개 SQL 틀 기억
 ```
 
-### 4. MySQL GTID 기반 자동 복제 (Data Tier)
+### 4. InnoDB Cluster + MySQL Router (Data Tier)
 
 ```mermaid
-flowchart LR
-    M["🔴 Master<br/>:13306"] -->|"Binary Log"| R["🟢 Replica<br/>:13307<br/>(read-only)"]
+flowchart TB
+    subgraph ROUTER ["� MySQL Router (이중화)"]
+        R1["Router #1\n:6446 (R/W) · :6447 (R/O)"]
+        R2["Router #2\n:7446 (R/W) · :7447 (R/O)"]
+    end
+
+    subgraph CLUSTER ["🛡️ InnoDB Cluster (Group Replication)"]
+        M1["🔴 mysql1\nPrimary (R/W)\nserver-id=100"]
+        M2["🟢 mysql2\nSecondary (R/O)\nserver-id=101"]
+        M3["🟢 mysql3\nSecondary (R/O)\nserver-id=102"]
+        M1 <-.-|"Group\nReplication"| M2
+        M1 <-.-|"Group\nReplication"| M3
+    end
+
+    R1 -->|"Write (:6446)"| M1
+    R1 -->|"Read (:6447)"| M2
+    R1 -->|"Read (:6447)"| M3
+    R2 -->|"Write (:7446)"| M1
+    R2 -->|"Read (:7447)"| M2
+    R2 -->|"Read (:7447)"| M3
 ```
-- Master에 데이터가 변경되면 **자동으로 Replica에 동기화**
-- GTID(Global Transaction ID) 기반으로 복제 위치를 정확히 추적
+
+| 구성 요소 | 설명 |
+|---|---|
+| **InnoDB Cluster** | 3개 MySQL 노드가 Group Replication으로 자동 동기화 |
+| **MySQL Router** | 애플리케이션 → 클러스터 간 **자동 라우팅** (R/W 분리) |
+| **Automatic Failover** | Primary 장애 시 Secondary가 자동 승격 (수동 개입 불필요) |
+| **GTID 기반 복제** | Global Transaction ID로 복제 위치를 정확히 추적 |
+
+- **Router 포트 규칙**: `:6446`/`:7446` → Primary(쓰기), `:6447`/`:7447` → Secondary(읽기)
+- **Router 이중화**: Router 한 대가 장애 나도 나머지 Router가 요청을 라우팅
 
 ---
 
@@ -124,8 +162,7 @@ flowchart LR
 Woori-FISA_3-Tier-Architecture/
 ├── nginx-config/
 │   └── nginx.conf                    # Nginx 로드밸런서 설정
-├── docker-compose.yml                # Master/Replica DB 컨테이너 정의
-├── setup.sh                          # DB 이중화 자동 세팅 스크립트
+├── docker-compose.yml                # InnoDB Cluster + MySQL Router 컨테이너 정의
 ├── project/src/main/java/dev/sample/
 │   ├── ApplicationContextListener.java   # HikariCP 풀 2개 초기화
 │   ├── controller/
@@ -151,11 +188,43 @@ Woori-FISA_3-Tier-Architecture/
 
 ## 🚀 실행 방법
 
-### 1단계: DB 환경 구축 (Docker)
+### 1단계: DB 환경 구축 (Docker + InnoDB Cluster)
 
 ```bash
-# Docker 컨테이너 실행 + Master/Replica 복제 설정 + 데이터 로딩
-./setup.sh
+# DB 컨테이너 실행
+docker-compose up -d mysql1 mysql2 mysql3
+```
+
+```bash
+# MySQL Shell 접속
+docker exec -it mysql1 mysqlsh root@mysql1:3306
+```
+
+```javascript
+// MySQL Shell
+
+// 1) 인스턴스 설정
+dba.configureInstance('root@mysql1:3306')
+dba.configureInstance('root@mysql2:3306')
+dba.configureInstance('root@mysql3:3306')
+
+// 2) 재부팅
+\c root@mysql1:3306
+
+// 3) 클러스터 생성
+var cluster = dba.createCluster('customCluster');
+
+// 4) 노드 추가
+cluster.addInstance('admin@mysql2:3306', {password: '1234', recoveryMethod: 'clone'});
+cluster.addInstance('admin@mysql3:3306', {password: '1234', recoveryMethod: 'clone'});
+
+// 5) 클러스터 상태 확인
+cluster.status();
+```
+
+```bash
+# MySQL Router 컨테이너 실행
+docker-compose up -d router1 router2
 ```
 
 ### 2단계: Tomcat 서버 실행 (IDE)
