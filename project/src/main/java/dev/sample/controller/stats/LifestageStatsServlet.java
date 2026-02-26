@@ -36,7 +36,8 @@ public class LifestageStatsServlet extends HttpServlet {
         log.info("GET /api/stats/lifestage - lifeStage={}", lifeStage);
 
         try {
-            DataSource ds = ApplicationContextListener.getDataSource(getServletContext());
+            // 통계 조회(SELECT)는 Replica(읽기) DB 연동
+            DataSource ds = ApplicationContextListener.getReplicaDataSource(getServletContext());
             StatsService service = new StatsService(ds);
 
             List<LifestageStatsDto> result = service.getStatsByLifestage(lifeStage);

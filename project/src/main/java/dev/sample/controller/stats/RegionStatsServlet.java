@@ -34,7 +34,8 @@ public class RegionStatsServlet extends HttpServlet {
         log.info("GET /api/stats/region");
 
         try {
-            DataSource ds = ApplicationContextListener.getDataSource(getServletContext());
+            // 통계 조회(SELECT)는 Replica(읽기) DB 연동
+            DataSource ds = ApplicationContextListener.getReplicaDataSource(getServletContext());
             StatsService service = new StatsService(ds);
 
             List<RegionStatsDto> result = service.getStatsByRegion();
