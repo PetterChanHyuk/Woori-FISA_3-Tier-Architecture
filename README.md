@@ -15,17 +15,17 @@ flowchart TB
     end
 
     subgraph WEB ["⚖️ Web Tier"]
-        Nginx["Nginx\nLoad Balancer\n:80"]
+        Nginx["Nginx<br/>Load Balancer<br/>:80"]
     end
 
     subgraph APP ["🍅 Application Tier"]
-        T1["Tomcat #1 (:8080)\nServlet → Service → DAO\nHikariCP Pool (10 conn)"]
-        T2["Tomcat #2 (:8090)\nServlet → Service → DAO\nHikariCP Pool (10 conn)"]
+        T1["Tomcat #1 (:8080)<br/>Servlet → Service → DAO<br/>HikariCP Pool (10 conn)"]
+        T2["Tomcat #2 (:8090)<br/>Servlet → Service → DAO<br/>HikariCP Pool (10 conn)"]
     end
 
     subgraph DATA ["🗄️ Data Tier (Docker)"]
-        Master["🔴 Master DB\n:13306\nWrite Only"]
-        Replica["🟢 Replica DB\n:13307\nRead Only"]
+        Master["🔴 Master DB<br/>:13306<br/>Write Only"]
+        Replica["🟢 Replica DB<br/>:13307<br/>Read Only"]
     end
 
     Browser -->|"HTTP Request"| Nginx
@@ -111,7 +111,7 @@ jdbc:mysql://host:port/card_db
 
 ```mermaid
 flowchart LR
-    M["🔴 Master\n:13306"] -->|"Binary Log"| R["🟢 Replica\n:13307\n(read-only)"]
+    M["🔴 Master<br/>:13306"] -->|"Binary Log"| R["🟢 Replica<br/>:13307<br/>(read-only)"]
 ```
 - Master에 데이터가 변경되면 **자동으로 Replica에 동기화**
 - GTID(Global Transaction ID) 기반으로 복제 위치를 정확히 추적
