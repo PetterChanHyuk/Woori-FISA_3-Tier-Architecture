@@ -37,12 +37,13 @@ public class CustomerGradeServlet extends HttpServlet {
 
         // PUT 요청은 getParameter()가 동작하지 않으므로 Body를 직접 파싱
         Map<String, String> params = parseBody(req);
-        String seq   = params.get("seq");
+        String seq = params.get("seq");
         String mbrRk = params.get("mbrRk");
         log.info("PUT /api/customer/grade - seq={}, mbrRk={}", seq, mbrRk);
 
         try {
-            DataSource ds = ApplicationContextListener.getDataSource(getServletContext());
+            // 회원등급 변경(UPDATE)은 Master(쓰기) DB 연동
+            DataSource ds = ApplicationContextListener.getMasterDataSource(getServletContext());
             CustomerService service = new CustomerService(ds);
 
             CustomerGradeDto dto = CustomerGradeDto.builder()
@@ -56,7 +57,7 @@ public class CustomerGradeServlet extends HttpServlet {
                 JsonResponseUtil.sendError(resp, 404, "해당 고객번호를 찾을 수 없습니다: " + seq);
             } else {
                 JsonResponseUtil.sendSuccess(resp,
-                    "{\"updatedRows\":" + updatedRows + ",\"seq\":\"" + seq + "\",\"mbrRk\":\"" + mbrRk + "\"}");
+                        "{\"updatedRows\":" + updatedRows + ",\"seq\":\"" + seq + "\",\"mbrRk\":\"" + mbrRk + "\"}");
             }
 
         } catch (IllegalArgumentException e) {
@@ -87,9 +88,8 @@ public class CustomerGradeServlet extends HttpServlet {
                 String[] kv = pair.split("=", 2);
                 if (kv.length == 2) {
                     params.put(
-                        URLDecoder.decode(kv[0], "UTF-8"),
-                        URLDecoder.decode(kv[1], "UTF-8")
-                    );
+                            URLDecoder.decode(kv[0], "UTF-8"),
+                            URLDecoder.decode(kv[1], "UTF-8"));
                 }
             }
         }

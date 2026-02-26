@@ -12,42 +12,53 @@ import com.zaxxer.hikari.HikariDataSource;
 @WebListener
 public class ApplicationContextListener implements ServletContextListener {
 
-    private HikariDataSource ds;
+    private HikariDataSource masterDs;
+    private HikariDataSource replicaDs;
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
         ServletContext ctx = sce.getServletContext();
-        
+
         try {
-			Class.forName("com.mysql.cj.jdbc.Driver");
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-		}
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
 
-        HikariConfig config = new HikariConfig();
-        // 필수 설정값(별도의 설정파일로 분리 가능, ex. jdbc.properties)
-        config.setJdbcUrl("jdbc:mysql://localhost:3306/card_db?serverTimezone=Asia/Seoul");
-        config.setUsername("root");
-        config.setPassword("1234");
+        // 1. 쓰기용 (Master) DataSource 설정
+        HikariConfig masterConfig = new HikariConfig();
+        masterConfig.setJdbcUrl(
+                "jdbc:mysql://localhost:13306/card_db?serverTimezone=Asia/Seoul&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250");
+        masterConfig.setUsername("root");
+        masterConfig.setPassword("1234");
+        masterConfig.setMaximumPoolSize(10);
+        masterDs = new HikariDataSource(masterConfig);
+        ctx.setAttribute("MASTER_DATA_SOURCE", masterDs);
 
-        // 선택 설정값 예시
-//        config.setMaximumPoolSize(10);
-//        config.setMinimumIdle(2);
-//        config.setConnectionTimeout(3000);
-//        config.setIdleTimeout(600000);
-//        config.setMaxLifetime(1800000);
-
-        ds = new HikariDataSource(config);
-
-        ctx.setAttribute("DATA_SOURCE", ds);
+        // 2. 읽기용 (Replica) DataSource 설정
+        HikariConfig replicaConfig = new HikariConfig();
+        replicaConfig.setJdbcUrl(
+                "jdbc:mysql://localhost:13307/card_db?serverTimezone=Asia/Seoul&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250");
+        replicaConfig.setUsername("root");
+        replicaConfig.setPassword("1234");
+        replicaConfig.setMaximumPoolSize(10);
+        replicaDs = new HikariDataSource(replicaConfig);
+        ctx.setAttribute("REPLICA_DATA_SOURCE", replicaDs);
     }
 
     @Override
     public void contextDestroyed(ServletContextEvent sce) {
-        if (ds != null) ds.close(); // 애플리케이션 종료 시 커넥션 풀 자원해제
+        if (masterDs != null)
+            masterDs.close();
+        if (replicaDs != null)
+            replicaDs.close();
     }
 
-    public static DataSource getDataSource(ServletContext ctx) {
-        return (DataSource) ctx.getAttribute("DATA_SOURCE");
+    public static DataSource getMasterDataSource(ServletContext ctx) {
+        return (DataSource) ctx.getAttribute("MASTER_DATA_SOURCE");
+    }
+
+    public static DataSource getReplicaDataSource(ServletContext ctx) {
+        return (DataSource) ctx.getAttribute("REPLICA_DATA_SOURCE");
     }
 }
