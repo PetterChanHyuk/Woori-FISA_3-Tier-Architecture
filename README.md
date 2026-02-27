@@ -150,22 +150,47 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 | `mysql2` | **:8082** | DB Secondary (R/O) |
 | `mysql3` | **:8083** | DB Secondary (R/O) |
 
-### STEP 6. Windows DNS 설정 변경
+### STEP 6. Windows DNS 설정 변경 (필수!)
 
-CoreDNS를 내 PC의 기본 DNS 서버로 지정하면, 브라우저/APIDog에서 도메인 이름으로 접근할 수 있습니다.
+> ⚠️ **이 단계를 하지 않으면 CoreDNS가 동작하지 않습니다!**
+> CoreDNS는 DNS 서버일 뿐이고, Windows가 CoreDNS에게 "물어보도록" 설정해줘야 합니다.
+> 실무에서는 Kubernetes가 자동으로 해주지만, 로컬 PC에서는 수동 설정이 필요합니다.
 
-1. **Windows 설정** → 네트워크 및 인터넷 → 이더넷(또는 Wi-Fi)
-2. **DNS 서버 할당** → 편집 → 수동
-3. 기본 DNS: `127.0.0.1` / 보조 DNS: `8.8.8.8`
-4. 저장
+#### 🔧 DNS 설정 방법 (테스트 시작 전)
 
-**DNS 라운드 로빈 동작 확인:**
+1. **Windows 키** → **"Wi-Fi 설정"** 검색 → 클릭
+2. **하드웨어 속성** 클릭
+3. **DNS 서버 할당** 옆의 **"편집"** 클릭
+4. **"자동(DHCP)"**를 **"수동"**으로 변경
+5. **IPv4** 켜기
+6. 아래 값 입력:
+   - 기본 DNS: `127.0.0.1` (CoreDNS로 라운드 로빈 응답)
+   - 보조 DNS: `8.8.8.8` (Google DNS — 인터넷 다른 사이트 접속용)
+7. **저장**
+
+#### ✅ DNS 라운드 로빈 동작 확인
+
 ```bash
-nslookup api.woorifisa.com 127.0.0.1
-# 결과: 127.0.0.1 과 127.0.0.2 두 개의 IP가 반환되면 성공!
+nslookup api.woorifisa.com
 ```
+```
+# 기대 결과:
+이름:    api.woorifisa.com
+Addresses:  127.0.0.1     ← Nginx #1
+            127.0.0.2     ← Nginx #2
+```
+두 개의 IP가 반환되면 DNS 라운드 로빈 성공!
 
-> ⚠️ 테스트 후 DNS 설정을 **"자동(DHCP)"**으로 되돌려 주세요.
+#### 🔄 DNS 되돌리기 (테스트 종료 후 — 반드시!)
+
+> ⚠️ CoreDNS 컨테이너를 끄기 전에 DNS를 먼저 되돌려야 합니다!
+> 안 되돌리면 DNS 질의가 꺼진 CoreDNS로 가서 인터넷이 안 될 수 있습니다.
+
+1. **Windows 키** → **"Wi-Fi 설정"** 검색 → 클릭
+2. **하드웨어 속성** 클릭
+3. **DNS 서버 할당** 옆의 **"편집"** 클릭
+4. **"수동"**을 **"자동(DHCP)"**로 변경
+5. **저장**
 
 ### STEP 7. API 테스트
 
