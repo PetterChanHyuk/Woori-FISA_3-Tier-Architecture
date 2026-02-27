@@ -151,7 +151,7 @@ flowchart TB
 | **Automatic Failover** | Primary 장애 시 Secondary가 자동 승격 (수동 개입 불필요) |
 | **GTID 기반 복제** | Global Transaction ID로 복제 위치를 정확히 추적 |
 
-- **Router 포트 규칙**: `:6446`/`:7446` → Primary(쓰기), `:6447`/`:7447` → Secondary(읽기)
+- **Router 포트 규칙**: `:6446` → Primary(쓰기), `:6447` → Secondary(읽기)
 - **Router 이중화**: Router 한 대가 장애 나도 나머지 Router가 요청을 라우팅
 
 ---
@@ -162,7 +162,11 @@ flowchart TB
 Woori-FISA_3-Tier-Architecture/
 ├── nginx-config/
 │   └── nginx.conf                    # Nginx 로드밸런서 설정
-├── docker-compose.yml                # InnoDB Cluster + MySQL Router 컨테이너 정의
+├── docker/
+│   └── DB                            
+│       └──docker-compose.yml         # InnoDB Cluster + MySQL Router 컨테이너 정의
+│   └── WAS                           
+│       └──docker-compose.yml         # Tomcat 컨테이너 정의
 ├── project/src/main/java/dev/sample/
 │   ├── ApplicationContextListener.java   # HikariCP 풀 2개 초기화
 │   ├── controller/
@@ -189,58 +193,60 @@ Woori-FISA_3-Tier-Architecture/
 ## 🚀 실행 방법
 
 ### 1단계: DB 환경 구축 (Docker + InnoDB Cluster)
+/docker/DB에서 docker-compose.yml을 실행한다.
 
 ```bash
 # DB 컨테이너 실행
-docker-compose up -d mysql1 mysql2 mysql3
+docker-compose up
 ```
-
+PRIMARY가 될 MySQL 컨테이너의 MySQL Shell로 접속한다.
 ```bash
 # MySQL Shell 접속
-docker exec -it mysql1 mysqlsh root@mysql1:3306
+docker exec -it mysql1 mysqlsh root@mysql1:8081
 ```
-
+인스턴스를 설정하고 클러스터링을 수행한다.
 ```javascript
 // MySQL Shell
 
 // 1) 인스턴스 설정
-dba.configureInstance('root@mysql1:3306')
-dba.configureInstance('root@mysql2:3306')
-dba.configureInstance('root@mysql3:3306')
+dba.configureInstance('root@mysql1:8081')
+dba.configureInstance('root@mysql2:8082')
+dba.configureInstance('root@mysql3:8083')
 
 // 2) 재부팅
-\c root@mysql1:3306
+\c root@mysql1:8081
 
 // 3) 클러스터 생성
-var cluster = dba.createCluster('customCluster');
+var cluster = dba.createCluster('sqlCluster', {localAddress: 'mysql1:8081'});
 
 // 4) 노드 추가
-cluster.addInstance('admin@mysql2:3306', {password: '1234', recoveryMethod: 'clone'});
-cluster.addInstance('admin@mysql3:3306', {password: '1234', recoveryMethod: 'clone'});
+cluster.addInstance('root@host.docker.internal:8082', {localAddress: 'mysql2:8082'});
+cluster.addInstance('root@host.docker.internal:8083', {localAddress: 'mysql3:8083'});
 
 // 5) 클러스터 상태 확인
 cluster.status();
 ```
 
+### 2단계: Tomcat 서버 및 MySQL Router 실행 (IDE)
+
+이클립스에서 프로젝트를 빌드한 `.war` 파일을 /docker/WAS/에 넣는다.
+`ApplicationContextListener.java`에서 아래 부분의 router의 순서를 변경하여 빌드를 수행해야 한다.
+각 파일의 이름은 `sample-project1.war`와 `sample-project2.war`로 변경한다.
+```java
+masterConfig.setJdbcUrl("jdbc:mysql://router1:6447,router2:6447...");
+```
+/docker/WAS에서 docker-compose.yml을 실행한다.
 ```bash
-# MySQL Router 컨테이너 실행
-docker-compose up -d router1 router2
+# WAS 컨테이너 실행
+docker-compose up
 ```
 
-### 2단계: Tomcat 서버 실행 (IDE)
-
-이클립스에서 2개의 Tomcat 서버를 설정합니다:
-- **Tomcat #1**: 포트 `8080`
-- **Tomcat #2**: 포트 `8090`
-
-두 서버 모두 프로젝트를 배포(Add and Remove)하고 Start합니다.
 
 ### 3단계: Nginx 로드밸런서 실행
 
 ```bash
 nginx -p "<Nginx 설치 경로>\" -c "<프로젝트 경로>\nginx-config\nginx.conf"
 ```
-
 ### 4단계: API 테스트
 
 ```bash

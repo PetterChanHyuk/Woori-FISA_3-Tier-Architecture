@@ -1,0 +1,50 @@
+name: inno_cluster
+
+services:
+  mysql1:
+    image: mysql:8.0
+    container_name: mysql1
+    environment: { MYSQL_ROOT_PASSWORD: "1234" }
+    ports:
+      - "8081:8081"  # ★ 외부 8081 : 내부 8081 로 통일!
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: 
+      - "--port=8081" # ★ 핵심: 내 진짜 포트를 8081로 바꾼다!
+      - "--server-id=100"
+      - "--enforce-gtid-consistency=ON"
+      - "--gtid-mode=ON"
+      - "--report-host=host.docker.internal"
+      - "--report-port=8081"
+
+  mysql2:
+    image: mysql:8.0
+    container_name: mysql2
+    environment: { MYSQL_ROOT_PASSWORD: "1234" }
+    ports:
+      - "8082:8082"  # ★ 외부 8082 : 내부 8082
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: 
+      - "--port=8082" # ★ 핵심: 내 진짜 포트를 8082로 바꾼다!
+      - "--server-id=101"
+      - "--enforce-gtid-consistency=ON"
+      - "--gtid-mode=ON"
+      - "--report-host=host.docker.internal"
+      - "--report-port=8082"
+
+  mysql3:
+    image: mysql:8.0
+    container_name: mysql3
+    environment: { MYSQL_ROOT_PASSWORD: "1234" }
+    ports:
+      - "8083:8083"  # ★ 외부 8083 : 내부 8083
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: 
+      - "--port=8083" # ★ 핵심: 내 진짜 포트를 8083으로 바꾼다!
+      - "--server-id=102"
+      - "--enforce-gtid-consistency=ON"
+      - "--gtid-mode=ON"
+      - "--report-host=host.docker.internal"
+      - "--report-port=8083"
