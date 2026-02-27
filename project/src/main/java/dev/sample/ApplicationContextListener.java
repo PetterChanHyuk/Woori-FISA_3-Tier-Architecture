@@ -28,7 +28,7 @@ public class ApplicationContextListener implements ServletContextListener {
         // 1. 쓰기용 (Master) DataSource 설정
         HikariConfig masterConfig = new HikariConfig();
         masterConfig.setJdbcUrl(
-                "jdbc:mysql://localhost:13306/card_db?serverTimezone=Asia/Seoul&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250");
+                "jdbc:mysql://router2:6447,router1:6447/card_db?serverTimezone=Asia/Seoul&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250");
         masterConfig.setUsername("root");
         masterConfig.setPassword("1234");
         masterConfig.setMaximumPoolSize(10);
@@ -38,7 +38,7 @@ public class ApplicationContextListener implements ServletContextListener {
         // 2. 읽기용 (Replica) DataSource 설정
         HikariConfig replicaConfig = new HikariConfig();
         replicaConfig.setJdbcUrl(
-                "jdbc:mysql://localhost:13307/card_db?serverTimezone=Asia/Seoul&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250");
+                "jdbc:mysql://router2:6446,router1:6446/card_db?serverTimezone=Asia/Seoul&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250");
         replicaConfig.setUsername("root");
         replicaConfig.setPassword("1234");
         replicaConfig.setMaximumPoolSize(10);

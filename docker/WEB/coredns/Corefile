@@ -1,0 +1,12 @@
+.:53 {
+    # api.woorifisa.com 도메인은 아래 zone 파일에서 응답
+    file /etc/coredns/db.woorifisa.com woorifisa.com
+
+    # 라운드 로빈 활성화 (IP 순서를 매 응답마다 회전)
+    loadbalance round_robin
+
+    # 그 외 도메인은 구글 DNS로 전달 (인터넷 정상 사용)
+    forward . 8.8.8.8 8.8.4.4
+
+    log
+}
