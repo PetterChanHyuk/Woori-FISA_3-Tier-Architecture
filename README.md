@@ -87,7 +87,7 @@ MySQL Shell 컨테이너를 임시로 띄워서 클러스터를 구성합니다.
 
 ```bash
 # MySQL Shell 접속
-docker run --rm -it --network inno_cluster_default mysql/mysql-shell:8.0 mysqlsh root@mysql1:8081
+docker exec -it mysql1 mysqlsh root@mysql1:8081
 ```
 
 **최초 구성 시:**
