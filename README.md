@@ -280,6 +280,24 @@ jdbc:mysql://host:port/card_db
 | **MySQL Router** | 애플리케이션 → 클러스터 간 자동 라우팅 (R/W 분리) |
 | **Automatic Failover** | Primary 장애 시 Secondary가 자동 승격 |
 
+
+### 7. 데이터베이스 테이블 및 성능 최적화(인덱스)
+
+데이터 조회의 성능을 향상시키기 위해 연령대(`AGE`), 라이프스테이지(`LIFE_STAGE`), 지역(`HOUS_SIDO_NM`) 컬럼에 대한 인덱스를 생성합니다.
+
+```sql
+CREATE TABLE IF NOT EXISTS `CARD_TRANSACTION` (
+    
+--테이블 스키마
+  
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- 통계 조회 성능 향상을 위한 인덱스 생성
+CREATE INDEX age_idx ON CARD_TRANSACTION (AGE);
+CREATE INDEX lifestage_idx ON CARD_TRANSACTION (LIFE_STAGE);
+CREATE INDEX region_idx ON CARD_TRANSACTION (HOUS_SIDO_NM);
+```
+
 ---
 
 ## 📁 프로젝트 구조
