@@ -1,12 +1,17 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>카드 거래 분석 대시보드</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
             font-family: 'Inter', sans-serif;
@@ -19,7 +24,7 @@
         header {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
             padding: 24px 32px;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -42,15 +47,23 @@
         }
 
         .server-badge .dot {
-            width: 8px; height: 8px;
+            width: 8px;
+            height: 8px;
             background: #4ade80;
             border-radius: 50%;
             animation: pulse 2s infinite;
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
         }
 
         /* ── Layout ── */
@@ -66,7 +79,7 @@
         /* ── Card ── */
         .card {
             background: linear-gradient(145deg, #1a1a2e, #16213e);
-            border: 1px solid rgba(255,255,255,0.06);
+            border: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 16px;
             padding: 24px;
             transition: transform 0.2s, box-shadow 0.2s;
@@ -115,7 +128,7 @@
         .card-url {
             font-size: 12px;
             color: #666;
-            background: rgba(0,0,0,0.3);
+            background: rgba(0, 0, 0, 0.3);
             padding: 8px 12px;
             border-radius: 8px;
             margin-bottom: 16px;
@@ -140,8 +153,8 @@
         .form-group input {
             width: 100%;
             padding: 10px 14px;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 8px;
             color: #e0e0e0;
             font-size: 14px;
@@ -188,7 +201,9 @@
             transform: translateY(-1px);
         }
 
-        .btn:active { transform: scale(0.98); }
+        .btn:active {
+            transform: scale(0.98);
+        }
 
         .btn:disabled {
             opacity: 0.5;
@@ -199,7 +214,7 @@
         /* ── Response ── */
         .response-area {
             margin-top: 16px;
-            background: rgba(0,0,0,0.4);
+            background: rgba(0, 0, 0, 0.4);
             border-radius: 10px;
             overflow: hidden;
             max-height: 0;
@@ -215,7 +230,7 @@
             justify-content: space-between;
             align-items: center;
             padding: 10px 14px;
-            background: rgba(0,0,0,0.3);
+            background: rgba(0, 0, 0, 0.3);
             font-size: 12px;
         }
 
@@ -266,15 +281,16 @@
         }
 
         .response-body::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 3px;
         }
 
         /* ── Loading ── */
         .spinner {
             display: inline-block;
-            width: 14px; height: 14px;
-            border: 2px solid rgba(0,0,0,0.2);
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(0, 0, 0, 0.2);
             border-top-color: #000;
             border-radius: 50%;
             animation: spin 0.6s linear infinite;
@@ -283,7 +299,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* ── Footer ── */
@@ -295,188 +313,294 @@
         }
 
         @media (max-width: 768px) {
-            .container { grid-template-columns: 1fr; }
+            .container {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
+
 <body>
 
-<header>
-    <h1>🏗️ 카드 거래 분석 대시보드</h1>
-    <div class="server-badge">
-        <span class="dot"></span>
-        <span>3-Tier Architecture</span>
-    </div>
-</header>
-
-<div class="container">
-
-    <!-- ① 지역별 통계 -->
-    <div class="card" id="card-region">
-        <div class="card-header">
-            <span class="card-title">📍 지역별 소비 통계</span>
-            <span class="method-badge method-get">GET</span>
+    <header>
+        <h1>🏗️ 카드 거래 분석 대시보드</h1>
+        <div class="server-badge">
+            <span class="dot"></span>
+            <span>3-Tier Architecture</span>
         </div>
-        <div class="card-url">/project/api/stats/region</div>
-        <button class="btn btn-get" onclick="callApi('region')">조회하기</button>
-        <div class="response-area" id="resp-region">
-            <div class="response-header">
-                <span class="status-code" id="status-region"></span>
-                <span class="response-time" id="time-region"></span>
+    </header>
+
+    <div class="container">
+
+        <!-- ⓪ 인증 관리 (Login/Logout/Me) -->
+        <div class="card" id="card-auth">
+            <div class="card-header">
+                <span class="card-title">🔐 인증 관리 (Redis 세션)</span>
+                <span class="method-badge method-put" id="auth-status-badge">비로그인</span>
             </div>
-            <div class="response-body" id="body-region"></div>
-        </div>
-    </div>
+            <div class="card-url">/project/api/auth/*</div>
 
-    <!-- ② 연령대별 통계 -->
-    <div class="card" id="card-age">
-        <div class="card-header">
-            <span class="card-title">👤 연령대별 소비 통계</span>
-            <span class="method-badge method-get">GET</span>
-        </div>
-        <div class="card-url">/project/api/stats/age?age=<span id="url-age-val">30</span></div>
-        <div class="form-group">
-            <label>연령대 코드</label>
-            <select id="input-age" onchange="document.getElementById('url-age-val').textContent=this.value">
-                <option value="20">20대 (20~24세)</option>
-                <option value="25">25대 (25~29세)</option>
-                <option value="30" selected>30대 (30~34세)</option>
-                <option value="35">35대 (35~39세)</option>
-                <option value="40">40대 (40~44세)</option>
-                <option value="45">45대 (45~49세)</option>
-                <option value="50">50대 (50~54세)</option>
-                <option value="55">55대 (55~59세)</option>
-                <option value="60">60대 (60~64세)</option>
-                <option value="65">65대 (65~69세)</option>
-            </select>
-        </div>
-        <button class="btn btn-get" onclick="callApi('age')">조회하기</button>
-        <div class="response-area" id="resp-age">
-            <div class="response-header">
-                <span class="status-code" id="status-age"></span>
-                <span class="response-time" id="time-age"></span>
+            <div id="login-form">
+                <div class="form-group">
+                    <label>아이디</label>
+                    <input type="text" id="input-id" value="admin" placeholder="admin">
+                </div>
+                <div class="form-group">
+                    <label>비밀번호</label>
+                    <input type="password" id="input-password" value="1234">
+                </div>
+                <button class="btn btn-get" onclick="authCall('login')">로그인</button>
             </div>
-            <div class="response-body" id="body-age"></div>
-        </div>
-    </div>
 
-    <!-- ③ 라이프스테이지별 통계 -->
-    <div class="card" id="card-lifestage">
-        <div class="card-header">
-            <span class="card-title">🌱 라이프스테이지별 통계</span>
-            <span class="method-badge method-get">GET</span>
-        </div>
-        <div class="card-url">/project/api/stats/lifestage?lifeStage=<span id="url-ls-val">NEW_WED</span></div>
-        <div class="form-group">
-            <label>라이프스테이지 코드</label>
-            <select id="input-lifestage" onchange="document.getElementById('url-ls-val').textContent=this.value">
-                <option value="NEW_WED" selected>신혼 (NEW_WED)</option>
-                <option value="YOUNG">영 (YOUNG)</option>
-                <option value="CHILD">자녀양육 (CHILD)</option>
-                <option value="MIDLIFE">중장년 (MIDLIFE)</option>
-                <option value="RETIRED">은퇴 (RETIRED)</option>
-            </select>
-        </div>
-        <button class="btn btn-get" onclick="callApi('lifestage')">조회하기</button>
-        <div class="response-area" id="resp-lifestage">
-            <div class="response-header">
-                <span class="status-code" id="status-lifestage"></span>
-                <span class="response-time" id="time-lifestage"></span>
+            <div id="logout-form" style="display:none;">
+                <p style="margin-bottom: 12px; font-size: 14px; color: #4ade80;">✅ 로그인된 사용자입니다: <strong
+                        id="logged-user-id"></strong></p>
+                <button class="btn btn-put" onclick="authCall('logout')">로그아웃</button>
             </div>
-            <div class="response-body" id="body-lifestage"></div>
-        </div>
-    </div>
 
-    <!-- ④ 고객 등급 변경 -->
-    <div class="card" id="card-grade">
-        <div class="card-header">
-            <span class="card-title">⭐ 고객 등급 변경</span>
-            <span class="method-badge method-put">PUT</span>
-        </div>
-        <div class="card-url">/project/api/customer/grade</div>
-        <div class="form-group">
-            <label>고객번호 (seq)</label>
-            <input type="text" id="input-seq" placeholder="예: 1001" value="1001">
-        </div>
-        <div class="form-group">
-            <label>회원등급 (mbrRk)</label>
-            <input type="text" id="input-mbrRk" placeholder="예: 22" value="22">
-        </div>
-        <button class="btn btn-put" onclick="callApi('grade')">등급 변경</button>
-        <div class="response-area" id="resp-grade">
-            <div class="response-header">
-                <span class="status-code" id="status-grade"></span>
-                <span class="response-time" id="time-grade"></span>
+            <button class="btn" style="background:#333; color:#fff;" onclick="authCall('me')">현재 세션 확인 (Me)</button>
+
+            <div class="response-area" id="resp-auth">
+                <div class="response-header">
+                    <span class="status-code" id="status-auth"></span>
+                    <span class="response-time" id="time-auth"></span>
+                </div>
+                <div class="response-body" id="body-auth"></div>
             </div>
-            <div class="response-body" id="body-grade"></div>
         </div>
+
+        <!-- ① 지역별 통계 -->
+        <div class="card" id="card-region">
+            <div class="card-header">
+                <span class="card-title">📍 지역별 소비 통계</span>
+                <span class="method-badge method-get">GET</span>
+            </div>
+            <div class="card-url">/project/api/stats/region</div>
+            <button class="btn btn-get" onclick="callApi('region')">조회하기</button>
+            <div class="response-area" id="resp-region">
+                <div class="response-header">
+                    <span class="status-code" id="status-region"></span>
+                    <span class="response-time" id="time-region"></span>
+                </div>
+                <div class="response-body" id="body-region"></div>
+            </div>
+        </div>
+
+        <!-- ② 연령대별 통계 -->
+        <div class="card" id="card-age">
+            <div class="card-header">
+                <span class="card-title">👤 연령대별 소비 통계</span>
+                <span class="method-badge method-get">GET</span>
+            </div>
+            <div class="card-url">/project/api/stats/age?age=<span id="url-age-val">30</span></div>
+            <div class="form-group">
+                <label>연령대 코드</label>
+                <select id="input-age" onchange="document.getElementById('url-age-val').textContent=this.value">
+                    <option value="20">20대 (20~24세)</option>
+                    <option value="25">25대 (25~29세)</option>
+                    <option value="30" selected>30대 (30~34세)</option>
+                    <option value="35">35대 (35~39세)</option>
+                    <option value="40">40대 (40~44세)</option>
+                    <option value="45">45대 (45~49세)</option>
+                    <option value="50">50대 (50~54세)</option>
+                    <option value="55">55대 (55~59세)</option>
+                    <option value="60">60대 (60~64세)</option>
+                    <option value="65">65대 (65~69세)</option>
+                </select>
+            </div>
+            <button class="btn btn-get" onclick="callApi('age')">조회하기</button>
+            <div class="response-area" id="resp-age">
+                <div class="response-header">
+                    <span class="status-code" id="status-age"></span>
+                    <span class="response-time" id="time-age"></span>
+                </div>
+                <div class="response-body" id="body-age"></div>
+            </div>
+        </div>
+
+        <!-- ③ 라이프스테이지별 통계 -->
+        <div class="card" id="card-lifestage">
+            <div class="card-header">
+                <span class="card-title">🌱 라이프스테이지별 통계</span>
+                <span class="method-badge method-get">GET</span>
+            </div>
+            <div class="card-url">/project/api/stats/lifestage?lifeStage=<span id="url-ls-val">NEW_WED</span></div>
+            <div class="form-group">
+                <label>라이프스테이지 코드</label>
+                <select id="input-lifestage" onchange="document.getElementById('url-ls-val').textContent=this.value">
+                    <option value="NEW_WED" selected>신혼 (NEW_WED)</option>
+                    <option value="YOUNG">영 (YOUNG)</option>
+                    <option value="CHILD">자녀양육 (CHILD)</option>
+                    <option value="MIDLIFE">중장년 (MIDLIFE)</option>
+                    <option value="RETIRED">은퇴 (RETIRED)</option>
+                </select>
+            </div>
+            <button class="btn btn-get" onclick="callApi('lifestage')">조회하기</button>
+            <div class="response-area" id="resp-lifestage">
+                <div class="response-header">
+                    <span class="status-code" id="status-lifestage"></span>
+                    <span class="response-time" id="time-lifestage"></span>
+                </div>
+                <div class="response-body" id="body-lifestage"></div>
+            </div>
+        </div>
+
+        <!-- ④ 고객 등급 변경 -->
+        <div class="card" id="card-grade">
+            <div class="card-header">
+                <span class="card-title">⭐ 고객 등급 변경</span>
+                <span class="method-badge method-put">PUT</span>
+            </div>
+            <div class="card-url">/project/api/customer/grade</div>
+            <div class="form-group">
+                <label>고객번호 (seq)</label>
+                <input type="text" id="input-seq" placeholder="예: 1001" value="1001">
+            </div>
+            <div class="form-group">
+                <label>회원등급 (mbrRk)</label>
+                <input type="text" id="input-mbrRk" placeholder="예: 22" value="22">
+            </div>
+            <button class="btn btn-put" onclick="callApi('grade')">등급 변경</button>
+            <div class="response-area" id="resp-grade">
+                <div class="response-header">
+                    <span class="status-code" id="status-grade"></span>
+                    <span class="response-time" id="time-grade"></span>
+                </div>
+                <div class="response-body" id="body-grade"></div>
+            </div>
+        </div>
+
     </div>
 
-</div>
+    <footer>
+        Woori-FISA 3-Tier Architecture &middot; DNS Round Robin → Nginx ×2 → Tomcat ×2 → InnoDB Cluster ×3
+    </footer>
 
-<footer>
-    Woori-FISA 3-Tier Architecture &middot; DNS Round Robin → Nginx ×2 → Tomcat ×2 → InnoDB Cluster ×3
-</footer>
+    <script>
+        const BASE = '';  // 같은 서버에서 서빙되므로 빈 문자열
 
-<script>
-    const BASE = '';  // 같은 서버에서 서빙되므로 빈 문자열
+        const API_MAP = {
+            region: { method: 'GET', url: () => `${BASE}/project/api/stats/region` },
+            age: { method: 'GET', url: () => `${BASE}/project/api/stats/age?age=${document.getElementById('input-age').value}` },
+            lifestage: { method: 'GET', url: () => `${BASE}/project/api/stats/lifestage?lifeStage=${document.getElementById('input-lifestage').value}` },
+            grade: {
+                method: 'PUT', url: () => `${BASE}/project/api/customer/grade`,
+                body: () => `seq=${document.getElementById('input-seq').value}&mbrRk=${document.getElementById('input-mbrRk').value}`
+            }
+        };
 
-    const API_MAP = {
-        region:    { method: 'GET',  url: () => `${BASE}/project/api/stats/region` },
-        age:       { method: 'GET',  url: () => `${BASE}/project/api/stats/age?age=${document.getElementById('input-age').value}` },
-        lifestage: { method: 'GET',  url: () => `${BASE}/project/api/stats/lifestage?lifeStage=${document.getElementById('input-lifestage').value}` },
-        grade:     { method: 'PUT',  url: () => `${BASE}/project/api/customer/grade`,
-                     body: () => `seq=${document.getElementById('input-seq').value}&mbrRk=${document.getElementById('input-mbrRk').value}` }
-    };
+        // 인증 API 핸들러
+        async function authCall(action) {
+            const respArea = document.getElementById(`resp-auth`);
+            const statusEl = document.getElementById(`status-auth`);
+            const timeEl = document.getElementById(`time-auth`);
+            const bodyEl = document.getElementById(`body-auth`);
+            const start = performance.now();
 
-    async function callApi(type) {
-        const api = API_MAP[type];
-        const btn = document.querySelector(`#card-${type} .btn`);
-        const respArea = document.getElementById(`resp-${type}`);
-        const statusEl = document.getElementById(`status-${type}`);
-        const timeEl = document.getElementById(`time-${type}`);
-        const bodyEl = document.getElementById(`body-${type}`);
+            let url = `${BASE}/project/api/auth/${action}`;
+            let options = { method: action === 'me' ? 'GET' : 'POST' };
 
-        // 로딩 상태
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span>요청 중...';
-        respArea.classList.remove('show');
-
-        const start = performance.now();
-
-        try {
-            const options = { method: api.method };
-            if (api.method === 'PUT') {
-                options.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-                options.body = api.body();
+            if (action === 'login') {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify({
+                    id: document.getElementById('input-id').value,
+                    password: document.getElementById('input-password').value
+                });
             }
 
-            const res = await fetch(api.url(), options);
-            const elapsed = ((performance.now() - start) / 1000).toFixed(3);
-            const data = await res.json();
+            try {
+                respArea.classList.remove('show');
+                const res = await fetch(url, options);
+                const data = await res.json();
+                const elapsed = ((performance.now() - start) / 1000).toFixed(3);
 
-            // 상태 코드 표시
-            statusEl.textContent = res.status;
-            statusEl.className = 'status-code ' +
-                (res.status < 300 ? 'status-2xx' : res.status < 500 ? 'status-4xx' : 'status-5xx');
+                statusEl.textContent = res.status;
+                statusEl.className = 'status-code ' + (res.status < 300 ? 'status-2xx' : res.status < 500 ? 'status-4xx' : 'status-5xx');
+                timeEl.textContent = `${elapsed}s`;
+                bodyEl.textContent = JSON.stringify(data, null, 2);
 
-            timeEl.textContent = `${elapsed}s`;
-            bodyEl.textContent = JSON.stringify(data, null, 2);
-
-        } catch (err) {
-            const elapsed = ((performance.now() - start) / 1000).toFixed(3);
-            statusEl.textContent = 'ERR';
-            statusEl.className = 'status-code status-err';
-            timeEl.textContent = `${elapsed}s`;
-            bodyEl.textContent = `요청 실패: ${err.message}\n\n서버가 실행 중인지 확인해 주세요.`;
+                // 로그인/로그아웃 성공 시 UI 변경
+                if (res.status === 200) {
+                    if (action === 'login' || action === 'me') {
+                        document.getElementById('login-form').style.display = 'none';
+                        document.getElementById('logout-form').style.display = 'block';
+                        document.getElementById('logged-user-id').textContent = data.data.name;
+                        document.getElementById('auth-status-badge').textContent = '로그인됨';
+                        document.getElementById('auth-status-badge').className = 'method-badge method-get';
+                    } else if (action === 'logout') {
+                        document.getElementById('login-form').style.display = 'block';
+                        document.getElementById('logout-form').style.display = 'none';
+                        document.getElementById('auth-status-badge').textContent = '비로그인';
+                        document.getElementById('auth-status-badge').className = 'method-badge method-put';
+                    }
+                } else if (action === 'me') {
+                    document.getElementById('login-form').style.display = 'block';
+                    document.getElementById('logout-form').style.display = 'none';
+                    document.getElementById('auth-status-badge').textContent = '비로그인';
+                    document.getElementById('auth-status-badge').className = 'method-badge method-put';
+                }
+            } catch (err) {
+                statusEl.textContent = 'ERR';
+                statusEl.className = 'status-code status-err';
+                bodyEl.textContent = `요청 실패: ${err.message}`;
+            }
+            respArea.classList.add('show');
         }
 
-        // 결과 표시
-        respArea.classList.add('show');
-        btn.disabled = false;
-        btn.innerHTML = api.method === 'PUT' ? '등급 변경' : '조회하기';
-    }
-</script>
+        // 페이지 로드 시 현재 세션 정보(me) 확인
+        window.addEventListener('DOMContentLoaded', () => {
+            authCall('me');
+        });
+
+        async function callApi(type) {
+            const api = API_MAP[type];
+            const btn = document.querySelector(`#card-${type} .btn`);
+            const respArea = document.getElementById(`resp-${type}`);
+            const statusEl = document.getElementById(`status-${type}`);
+            const timeEl = document.getElementById(`time-${type}`);
+            const bodyEl = document.getElementById(`body-${type}`);
+
+            // 로딩 상태
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>요청 중...';
+            respArea.classList.remove('show');
+
+            const start = performance.now();
+
+            try {
+                const options = { method: api.method };
+                if (api.method === 'PUT') {
+                    options.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+                    options.body = api.body();
+                }
+
+                const res = await fetch(api.url(), options);
+                const elapsed = ((performance.now() - start) / 1000).toFixed(3);
+                const data = await res.json();
+
+                // 상태 코드 표시
+                statusEl.textContent = res.status;
+                statusEl.className = 'status-code ' +
+                    (res.status < 300 ? 'status-2xx' : res.status < 500 ? 'status-4xx' : 'status-5xx');
+
+                timeEl.textContent = `${elapsed}s`;
+                bodyEl.textContent = JSON.stringify(data, null, 2);
+
+            } catch (err) {
+                const elapsed = ((performance.now() - start) / 1000).toFixed(3);
+                statusEl.textContent = 'ERR';
+                statusEl.className = 'status-code status-err';
+                timeEl.textContent = `${elapsed}s`;
+                bodyEl.textContent = `요청 실패: ${err.message}\n\n서버가 실행 중인지 확인해 주세요.`;
+            }
+
+            // 결과 표시
+            respArea.classList.add('show');
+            btn.disabled = false;
+            btn.innerHTML = api.method === 'PUT' ? '등급 변경' : '조회하기';
+        }
+    </script>
 
 </body>
+
 </html>

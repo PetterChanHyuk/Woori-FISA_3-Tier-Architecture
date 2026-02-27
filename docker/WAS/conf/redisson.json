@@ -1,0 +1,9 @@
+{
+    "singleServerConfig": {
+        "address": "redis://host.docker.internal:6379",
+        "password": "redis1234"
+    },
+    "threads": 4,
+    "nettyThreads": 4,
+    "transportMode": "NIO"
+}

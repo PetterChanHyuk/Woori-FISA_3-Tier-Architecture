@@ -30,6 +30,12 @@ services:
       - "8080:8080"
     volumes:
       - ./sample-project1.war:/usr/local/tomcat/webapps/project.war # .war 파일이 들어있는 폴더 연결
+      - ./lib/redisson-all-3.27.2.jar:/usr/local/tomcat/lib/redisson-all.jar:ro
+      - ./lib/redisson-tomcat-9-3.27.2.jar:/usr/local/tomcat/lib/redisson-tomcat.jar:ro
+      - ./conf/redisson.json:/usr/local/tomcat/conf/redisson.json:ro
+      - ./conf/context.xml:/usr/local/tomcat/conf/context.xml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - TZ=Asia/Seoul
     depends_on:
@@ -43,6 +49,12 @@ services:
       - "8090:8080"
     volumes:
       - ./sample-project2.war:/usr/local/tomcat/webapps/project.war # .war 파일이 들어있는 폴더 연결
+      - ./lib/redisson-all-3.27.2.jar:/usr/local/tomcat/lib/redisson-all.jar:ro
+      - ./lib/redisson-tomcat-9-3.27.2.jar:/usr/local/tomcat/lib/redisson-tomcat.jar:ro
+      - ./conf/redisson.json:/usr/local/tomcat/conf/redisson.json:ro
+      - ./conf/context.xml:/usr/local/tomcat/conf/context.xml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - TZ=Asia/Seoul
     depends_on:

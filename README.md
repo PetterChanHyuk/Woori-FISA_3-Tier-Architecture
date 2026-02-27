@@ -24,8 +24,12 @@ flowchart TB
     end
 
     subgraph APP ["🍅 Application Tier (Docker)"]
-        T1["Tomcat #1 (:8080)<br/>Servlet → Service → DAO<br/>HikariCP Pool"]
-        T2["Tomcat #2 (:8090)<br/>Servlet → Service → DAO<br/>HikariCP Pool"]
+        T1["Tomcat #1 (:8080)<br/>Redisson(Redis)<br/>HikariCP Pool"]
+        T2["Tomcat #2 (:8090)<br/>Redisson(Redis)<br/>HikariCP Pool"]
+    end
+
+    subgraph SESSION ["🛒 Session Tier (Docker)"]
+        Redis["Redis Session<br/>:6379"]
     end
 
     subgraph DATA ["🗄️ Data Tier (Docker)"]
@@ -43,10 +47,14 @@ flowchart TB
     Browser -->|"api.woorifisa.com"| CoreDNS
     CoreDNS -->|"127.0.0.1"| N1
     CoreDNS -->|"127.0.0.2"| N2
-    N1 -->|"ip_hash"| T1
-    N1 -->|"ip_hash"| T2
-    N2 -->|"ip_hash"| T1
-    N2 -->|"ip_hash"| T2
+    N1 -->|"/project/api/*"| T1
+    N1 -->|"/project/api/*"| T2
+    N1 -.->|"/project/* (Static)"| N1
+    N2 -->|"/project/api/*"| T1
+    N2 -->|"/project/api/*"| T2
+    N2 -.->|"/project/* (Static)"| N2
+    T1 -.->|"Session"| Redis
+    T2 -.->|"Session"| Redis
     T1 --> R1
     T2 --> R2
     R1 -->|"Write"| M1
@@ -59,13 +67,14 @@ flowchart TB
     M1 <-.->|"Group Replication"| M3
 ```
 
-### SPOF(단일 장애점) 제거 현황
+### SPOF(단일 장애점) 제거 및 고가용성 현황
 
 | 계층 | 구성 | 장애 시나리오 | 결과 |
 |---|---|---|---|
 | **DNS** | CoreDNS (라운드 로빈) | Nginx 1대 장애 | 다른 IP의 Nginx로 자동 분배 |
 | **WEB** | Nginx ×2대 (IP 분리) | Nginx 1대 장애 | 나머지 Nginx가 서비스 유지 |
 | **WAS** | Tomcat ×2대 | Tomcat 1대 장애 | Nginx가 살아있는 Tomcat으로 전환 |
+| **세션** | Redis (단일망) | Tomcat 장애 시 | **다른 Tomcat에서 즉시 Redis 세션 인계** |
 | **DB** | InnoDB Cluster ×3대 | Primary 장애 | Secondary가 자동 승격 (Failover) |
 
 ---
@@ -113,16 +122,25 @@ var cluster = dba.getCluster()
 cluster.status()
 ```
 
-### STEP 3. WAS 가동 (Router 2대 + Tomcat 2대)
+### STEP 3. SESSION 관리 가동 (Redis)
+
+톰캣 이중화 환경에서 사용자의 로그인 세션을 어느 톰캣으로 접속하든 잃지 않고 유지해주는 **세션 클러스터링소**입니다.
+
+```bash
+cd docker/SESSION
+docker-compose up -d
+```
+
+### STEP 4. WAS 가동 (Router 2대 + Tomcat 2대)
 
 ```bash
 cd docker/WAS
 docker-compose up -d
 ```
 
-> 💡 `.war` 파일은 `docker/WAS/` 에 `sample-project1.war`, `sample-project2.war` 이름으로 배치합니다.
+> 💡 `.war` 파일은 `docker/WAS/` 에 `sample-project1.war`, `sample-project2.war` 이름으로 배치합니다. Tomcat 구동 시 Redis와 자동으로 커넥션을 맺습니다.
 
-### STEP 4. WEB 가동 (Nginx 2대 + CoreDNS)
+### STEP 5. WEB 가동 (Nginx 2대 + CoreDNS)
 
 ```bash
 cd docker/WEB
@@ -140,10 +158,11 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 | 컨테이너 | 포트 | 역할 |
 |---|---|---|
 | `coredns` | :53 (UDP/TCP) | DNS 라운드 로빈 서버 |
-| `nginx1` | 127.0.0.1:**80** | 로드밸런서 #1 |
-| `nginx2` | 127.0.0.2:**80** | 로드밸런서 #2 |
-| `tomcat-app1` | **:8080** | WAS #1 |
-| `tomcat-app2` | **:8090** | WAS #2 |
+| `nginx1` | 127.0.0.1:**80** | 로드밸런서 #1 + 정적 리소스 |
+| `nginx2` | 127.0.0.2:**80** | 로드밸런서 #2 + 정적 리소스 |
+| `tomcat-app1` | **:8080** | WAS #1 (API 전용) |
+| `tomcat-app2` | **:8090** | WAS #2 (API 전용) |
+| `redis-session` | **:6379** | Redis 세션 호스트 |
 | `router1` | - | MySQL Router #1 |
 | `router2` | - | MySQL Router #2 |
 | `mysql1` | **:8081** | DB Primary (R/W) |
@@ -192,17 +211,27 @@ Addresses:  127.0.0.1     ← Nginx #1
 4. **"수동"**을 **"자동(DHCP)"**로 변경
 5. **저장**
 
-### STEP 7. API 테스트
+### STEP 7. API 테스트 (로그인 & 데이터 처리)
+
+> 🚨 **주의:** `AuthenticationFilter`로 인해 `/api/auth/*` 이외의 모든 경로는 로그인하지 않으면 **`401 Unauthorized`** 로 차단됩니다! 먼저 로그인을 수행하세요.
 
 ```bash
-# 통계 조회 (DNS 라운드 로빈 → Nginx → Tomcat → Replica DB)
+# 1. 사용자 로그인 (Session은 Redis에 기록됨!)
+POST http://api.woorifisa.com/project/api/auth/login
+Body (application/json): {"id":"admin", "password":"1234"}
+# 로그인 성공 후 반환되는 JSESSIONID 쿠키를 들고 다닙니다.
+
+# 2. 통계 조회 (DNS 라운드 로빈 → Nginx → Tomcat(세션 검증) → Replica DB)
 GET http://api.woorifisa.com/project/api/stats/region
 GET http://api.woorifisa.com/project/api/stats/age?age=30
 GET http://api.woorifisa.com/project/api/stats/lifestage?lifeStage=NEW_WED
 
-# 고객 등급 변경 (DNS 라운드 로빈 → Nginx → Tomcat → Master DB)
+# 3. 고객 등급 변경 (DNS 라운드 로빈 → Nginx → Tomcat(세션 검증) → Master DB)
 PUT http://api.woorifisa.com/project/api/customer/grade
 Body (x-www-form-urlencoded): seq=1001, mbrRk=22
+
+# 4. 사용자 로그아웃
+POST http://api.woorifisa.com/project/api/auth/logout
 ```
 
 ---
@@ -242,17 +271,27 @@ location /project/api/ {
 | `/project/index.html` | **Nginx** (직접) | 빠름, 톰캣 부하 없음 |
 | `/project/api/stats/region` | **Tomcat** (프록시) | API만 톰캣이 처리 |
 
-### 3. Nginx 로드밸런싱 (ip_hash)
+### 3. Nginx 로드밸런싱 (Round Robin) + Redis 무상태(Stateless) 아키텍처
 
-각 Nginx가 톰캣 2대를 바라보며, `ip_hash`로 세션을 유지합니다.
+기존에는 Nginx에서 서버 간 세션 불일치 문제를 해결하기 위해 `ip_hash;`를 사용하여 특정 클라이언트의 트래픽을 한 Tomcat으로 고정했습니다(Sticky Session).
+그러나 이 구조는 특정 서버가 과부하를 받더라도 완화할 수 없다는 치명적 단점이 있습니다.
+
+현 아키텍처에서는 **Redisson(Redis)**을 통하여 **Tomcat 간 세션 클러스터링(공유)**이 구성되었습니다.
+즉, WAS가 상태를 갖지 않는 무상태(Stateless) 형태로 탈바꿈하였으며, 이에 따라 Nginx는 `ip_hash`의 족쇄에서 벗어나 **트래픽을 완벽히 1:1로 분산하는 `Round Robin`(기본값)** 배분이 가능해졌습니다.
 
 ```nginx
 upstream tomcat-servers {
-    ip_hash;
+    # ip_hash;  <-- 제거됨! Redis가 세션을 보장하므로 더 이상 필요하지 않음.
     server host.docker.internal:8080;
     server host.docker.internal:8090;
 }
 ```
+
+#### 세션 Failover 동작 원리
+1. 사용자가 Tomcat 1을 통해 로그인. 이때 `JSESSIONID` 값과 내용이 Redis에 저장됨.
+2. 이후 사용자의 요청이 Tomcat 2로 분배됨 (Round Robin)
+3. Tomcat 2는 로컬 메모리에 해당 세션이 없지만, Redis를 조회하여 사용자가 인증된 상태임을 판별함.
+4. Tomcat 1 서버가 물리적으로 폭파(Down)되어도 사용자는 로그인이 풀리지 않고 정상적으로 서비스 이용이 가능(Failover)함!
 
 ### 4. DB 읽기/쓰기 분리
 
@@ -323,17 +362,23 @@ Woori-FISA_3-Tier-Architecture/
 ├── project/src/main/java/dev/sample/
 │   ├── ApplicationContextListener.java # HikariCP 풀 2개 초기화
 │   ├── controller/
+│   │   ├── auth/
+│   │   │   ├── LoginServlet.java       # POST - 로그인, Redis에 세션 적재
+│   │   │   ├── LogoutServlet.java      # POST - 로그아웃
+│   │   │   └── MeServlet.java          # GET - 현재 로그인된 내 정보 조회
 │   │   ├── customer/
-│   │   │   └── CustomerGradeServlet.java   # PUT - 고객등급 변경
+│   │   │   └── CustomerGradeServlet.java   # PUT - 고객등급 변경 (인증됨)
 │   │   └── stats/
-│   │       ├── AgeStatsServlet.java        # GET - 연령대별 통계
-│   │       ├── LifestageStatsServlet.java  # GET - 라이프스테이지별
-│   │       └── RegionStatsServlet.java     # GET - 지역별 통계
+│   │       ├── AgeStatsServlet.java        # GET - 연령대별 통계 (인증됨)
+│   │       ├── LifestageStatsServlet.java  # GET - 라이프스테이지별 (인증됨)
+│   │       └── RegionStatsServlet.java     # GET - 지역별 통계 (인증됨)
+│   ├── filter/
+│   │   └── AuthenticationFilter.java   # 로그인하지 않은 사용자의 데이터 API(stats/customer) 접근 차단 401
 │   ├── service/                        # 비즈니스 로직 + 유효성 검증
 │   ├── dao/                            # DB 접근 (PreparedStatement)
-│   ├── dto/                            # 데이터 전송 객체 (Lombok)
+│   ├── dto/                            # 데이터 전송 객체 (Lombok, Authentication Serializable)
 │   └── util/                           # JSON 응답 유틸리티
-└── libraries/                          # JAR 라이브러리
+└── libraries/                          # JAR 라이브러리 추가 (Redisson, Jackson)
 ```
 
 ---
@@ -343,11 +388,13 @@ Woori-FISA_3-Tier-Architecture/
 | 계층 | 기술 | 역할 |
 |---|---|---|
 | DNS | **CoreDNS 1.12** | DNS 라운드 로빈 (SPOF 제거) |
-| Web | **Nginx 1.28 ×2대** | 로드밸런싱, 리버스 프록시 |
+| Web | **Nginx 1.28 ×2대** | 로드밸런싱, 리버스 프록시, API-Static 분리 |
 | App | **Tomcat 9.0 ×2대** | 서블릿 컨테이너 |
 | App | **Java 17 + Servlet API** | RESTful API |
 | App | **HikariCP** | JDBC 커넥션 풀 |
-| App | **Lombok + Logback** | 코드 생산성 + 로깅 |
+| App | **Redisson** | Redis 연동 (Session Manager) |
+| App | **Lombok + Jackson + Logback** | 코드 생산성, JSON, 로깅 |
+| Data | **Redis 7.2** | 세션 클러스터링 저장소 |
 | Data | **MySQL 8.0 ×3대** | InnoDB Cluster (Group Replication) |
 | Data | **MySQL Router ×2대** | 자동 R/W 라우팅 |
 | Infra | **Docker Compose** | 컨테이너 오케스트레이션 |
