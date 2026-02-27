@@ -26,7 +26,7 @@ flowchart TB
     subgraph DATA ["🗄️ Data Tier (Docker)"]
         subgraph ROUTER ["� MySQL Router"]
             R1["Router #1<br/>:6446 (R/W) · :6447 (R/O)"]
-            R2["Router #2<br/>:7446 (R/W) · :7447 (R/O)"]
+            R2["Router #2<br/>:6446 (R/W) · :6447 (R/O)"]
         end
         subgraph CLUSTER ["�️ InnoDB Cluster"]
             M1["🔴 mysql1<br/>Primary (R/W)"]
