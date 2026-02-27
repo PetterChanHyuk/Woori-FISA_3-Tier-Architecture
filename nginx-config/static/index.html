@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>카드 거래 분석 대시보드</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            padding: 24px 32px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .server-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #888;
+        }
+
+        .server-badge .dot {
+            width: 8px; height: 8px;
+            background: #4ade80;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ── Layout ── */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        /* ── Card ── */
+        .card {
+            background: linear-gradient(145deg, #1a1a2e, #16213e);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            padding: 24px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(102, 126, 234, 0.15);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .method-badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 6px;
+            letter-spacing: 0.5px;
+        }
+
+        .method-get {
+            background: rgba(74, 222, 128, 0.15);
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+
+        .method-put {
+            background: rgba(251, 191, 36, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+
+        .card-url {
+            font-size: 12px;
+            color: #666;
+            background: rgba(0,0,0,0.3);
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+        }
+
+        /* ── Form ── */
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: #888;
+            margin-bottom: 4px;
+        }
+
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #e0e0e0;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group select:focus,
+        .form-group input:focus {
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 8px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn-get {
+            background: linear-gradient(135deg, #4ade80, #22c55e);
+            color: #000;
+        }
+
+        .btn-get:hover {
+            box-shadow: 0 4px 20px rgba(74, 222, 128, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-put {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #000;
+        }
+
+        .btn-put:hover {
+            box-shadow: 0 4px 20px rgba(251, 191, 36, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn:active { transform: scale(0.98); }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* ── Response ── */
+        .response-area {
+            margin-top: 16px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 10px;
+            overflow: hidden;
+            max-height: 0;
+            transition: max-height 0.4s ease;
+        }
+
+        .response-area.show {
+            max-height: 400px;
+        }
+
+        .response-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: rgba(0,0,0,0.3);
+            font-size: 12px;
+        }
+
+        .status-code {
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .status-2xx {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+        }
+
+        .status-4xx {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+        }
+
+        .status-5xx {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .status-err {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .response-time {
+            color: #888;
+        }
+
+        .response-body {
+            padding: 12px 14px;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: #a0a0a0;
+            line-height: 1.6;
+        }
+
+        .response-body::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .response-body::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+
+        /* ── Loading ── */
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-top-color: #000;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Footer ── */
+        footer {
+            text-align: center;
+            padding: 24px;
+            color: #444;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🏗️ 카드 거래 분석 대시보드</h1>
+    <div class="server-badge">
+        <span class="dot"></span>
+        <span>3-Tier Architecture</span>
+    </div>
+</header>
+
+<div class="container">
+
+    <!-- ① 지역별 통계 -->
+    <div class="card" id="card-region">
+        <div class="card-header">
+            <span class="card-title">📍 지역별 소비 통계</span>
+            <span class="method-badge method-get">GET</span>
+        </div>
+        <div class="card-url">/project/api/stats/region</div>
+        <button class="btn btn-get" onclick="callApi('region')">조회하기</button>
+        <div class="response-area" id="resp-region">
+            <div class="response-header">
+                <span class="status-code" id="status-region"></span>
+                <span class="response-time" id="time-region"></span>
+            </div>
+            <div class="response-body" id="body-region"></div>
+        </div>
+    </div>
+
+    <!-- ② 연령대별 통계 -->
+    <div class="card" id="card-age">
+        <div class="card-header">
+            <span class="card-title">👤 연령대별 소비 통계</span>
+            <span class="method-badge method-get">GET</span>
+        </div>
+        <div class="card-url">/project/api/stats/age?age=<span id="url-age-val">30</span></div>
+        <div class="form-group">
+            <label>연령대 코드</label>
+            <select id="input-age" onchange="document.getElementById('url-age-val').textContent=this.value">
+                <option value="20">20대 (20~24세)</option>
+                <option value="25">25대 (25~29세)</option>
+                <option value="30" selected>30대 (30~34세)</option>
+                <option value="35">35대 (35~39세)</option>
+                <option value="40">40대 (40~44세)</option>
+                <option value="45">45대 (45~49세)</option>
+                <option value="50">50대 (50~54세)</option>
+                <option value="55">55대 (55~59세)</option>
+                <option value="60">60대 (60~64세)</option>
+                <option value="65">65대 (65~69세)</option>
+            </select>
+        </div>
+        <button class="btn btn-get" onclick="callApi('age')">조회하기</button>
+        <div class="response-area" id="resp-age">
+            <div class="response-header">
+                <span class="status-code" id="status-age"></span>
+                <span class="response-time" id="time-age"></span>
+            </div>
+            <div class="response-body" id="body-age"></div>
+        </div>
+    </div>
+
+    <!-- ③ 라이프스테이지별 통계 -->
+    <div class="card" id="card-lifestage">
+        <div class="card-header">
+            <span class="card-title">🌱 라이프스테이지별 통계</span>
+            <span class="method-badge method-get">GET</span>
+        </div>
+        <div class="card-url">/project/api/stats/lifestage?lifeStage=<span id="url-ls-val">NEW_WED</span></div>
+        <div class="form-group">
+            <label>라이프스테이지 코드</label>
+            <select id="input-lifestage" onchange="document.getElementById('url-ls-val').textContent=this.value">
+                <option value="NEW_WED" selected>신혼 (NEW_WED)</option>
+                <option value="YOUNG">영 (YOUNG)</option>
+                <option value="CHILD">자녀양육 (CHILD)</option>
+                <option value="MIDLIFE">중장년 (MIDLIFE)</option>
+                <option value="RETIRED">은퇴 (RETIRED)</option>
+            </select>
+        </div>
+        <button class="btn btn-get" onclick="callApi('lifestage')">조회하기</button>
+        <div class="response-area" id="resp-lifestage">
+            <div class="response-header">
+                <span class="status-code" id="status-lifestage"></span>
+                <span class="response-time" id="time-lifestage"></span>
+            </div>
+            <div class="response-body" id="body-lifestage"></div>
+        </div>
+    </div>
+
+    <!-- ④ 고객 등급 변경 -->
+    <div class="card" id="card-grade">
+        <div class="card-header">
+            <span class="card-title">⭐ 고객 등급 변경</span>
+            <span class="method-badge method-put">PUT</span>
+        </div>
+        <div class="card-url">/project/api/customer/grade</div>
+        <div class="form-group">
+            <label>고객번호 (seq)</label>
+            <input type="text" id="input-seq" placeholder="예: 1001" value="1001">
+        </div>
+        <div class="form-group">
+            <label>회원등급 (mbrRk)</label>
+            <input type="text" id="input-mbrRk" placeholder="예: 22" value="22">
+        </div>
+        <button class="btn btn-put" onclick="callApi('grade')">등급 변경</button>
+        <div class="response-area" id="resp-grade">
+            <div class="response-header">
+                <span class="status-code" id="status-grade"></span>
+                <span class="response-time" id="time-grade"></span>
+            </div>
+            <div class="response-body" id="body-grade"></div>
+        </div>
+    </div>
+
+</div>
+
+<footer>
+    Woori-FISA 3-Tier Architecture &middot; DNS Round Robin → Nginx ×2 → Tomcat ×2 → InnoDB Cluster ×3
+</footer>
+
+<script>
+    const BASE = '';  // 같은 서버에서 서빙되므로 빈 문자열
+
+    const API_MAP = {
+        region:    { method: 'GET',  url: () => `${BASE}/project/api/stats/region` },
+        age:       { method: 'GET',  url: () => `${BASE}/project/api/stats/age?age=${document.getElementById('input-age').value}` },
+        lifestage: { method: 'GET',  url: () => `${BASE}/project/api/stats/lifestage?lifeStage=${document.getElementById('input-lifestage').value}` },
+        grade:     { method: 'PUT',  url: () => `${BASE}/project/api/customer/grade`,
+                     body: () => `seq=${document.getElementById('input-seq').value}&mbrRk=${document.getElementById('input-mbrRk').value}` }
+    };
+
+    async function callApi(type) {
+        const api = API_MAP[type];
+        const btn = document.querySelector(`#card-${type} .btn`);
+        const respArea = document.getElementById(`resp-${type}`);
+        const statusEl = document.getElementById(`status-${type}`);
+        const timeEl = document.getElementById(`time-${type}`);
+        const bodyEl = document.getElementById(`body-${type}`);
+
+        // 로딩 상태
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>요청 중...';
+        respArea.classList.remove('show');
+
+        const start = performance.now();
+
+        try {
+            const options = { method: api.method };
+            if (api.method === 'PUT') {
+                options.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+                options.body = api.body();
+            }
+
+            const res = await fetch(api.url(), options);
+            const elapsed = ((performance.now() - start) / 1000).toFixed(3);
+            const data = await res.json();
+
+            // 상태 코드 표시
+            statusEl.textContent = res.status;
+            statusEl.className = 'status-code ' +
+                (res.status < 300 ? 'status-2xx' : res.status < 500 ? 'status-4xx' : 'status-5xx');
+
+            timeEl.textContent = `${elapsed}s`;
+            bodyEl.textContent = JSON.stringify(data, null, 2);
+
+        } catch (err) {
+            const elapsed = ((performance.now() - start) / 1000).toFixed(3);
+            statusEl.textContent = 'ERR';
+            statusEl.className = 'status-code status-err';
+            timeEl.textContent = `${elapsed}s`;
+            bodyEl.textContent = `요청 실패: ${err.message}\n\n서버가 실행 중인지 확인해 주세요.`;
+        }
+
+        // 결과 표시
+        respArea.classList.add('show');
+        btn.disabled = false;
+        btn.innerHTML = api.method === 'PUT' ? '등급 변경' : '조회하기';
+    }
+</script>
+
+</body>
+</html>
