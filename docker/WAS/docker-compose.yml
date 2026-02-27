@@ -1,0 +1,50 @@
+name: WAS
+
+services:
+  router1:
+    image: mysql/mysql-router:8.0
+    container_name: router1
+    environment:
+      # 도커 내부 이름(mysql1)이 아닌, 호스트 PC를 경유하도록 설정
+      MYSQL_HOST: host.docker.internal 
+      MYSQL_PORT: 8081
+      MYSQL_USER: root
+      MYSQL_PASSWORD: "1234"
+      MYSQL_CREATE_ROUTER_USER: 0
+  
+  router2:
+    image: mysql/mysql-router:8.0
+    container_name: router2
+    environment:
+      # 도커 내부 이름(mysql1)이 아닌, 호스트 PC를 경유하도록 설정
+      MYSQL_HOST: host.docker.internal 
+      MYSQL_PORT: 8081
+      MYSQL_USER: root
+      MYSQL_PASSWORD: "1234"
+      MYSQL_CREATE_ROUTER_USER: 0
+
+  tomcat-app1:
+    image: tomcat:9.0-jdk17
+    container_name: tomcat-app1
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./sample-project1.war:/usr/local/tomcat/webapps/project.war # .war 파일이 들어있는 폴더 연결
+    environment:
+      - TZ=Asia/Seoul
+    depends_on:
+      - router1
+      - router2
+  
+  tomcat-app2:
+    image: tomcat:9.0-jdk17
+    container_name: tomcat-app2
+    ports:
+      - "8090:8080"
+    volumes:
+      - ./sample-project2.war:/usr/local/tomcat/webapps/project.war # .war 파일이 들어있는 폴더 연결
+    environment:
+      - TZ=Asia/Seoul
+    depends_on:
+      - router1
+      - router2
