@@ -8,6 +8,7 @@ services:
       - "127.0.0.1:80:80"    # IP 127.0.0.1의 80번 포트에 바인딩
     volumes:
       - ../../nginx-config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../nginx-config/static/:/usr/share/nginx/html/:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -19,6 +20,7 @@ services:
       - "127.0.0.2:80:80"    # IP 127.0.0.2의 80번 포트에 바인딩 (포트 충돌 없음!)
     volumes:
       - ../../nginx-config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../nginx-config/static/:/usr/share/nginx/html/:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

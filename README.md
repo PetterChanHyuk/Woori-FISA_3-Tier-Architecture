@@ -219,7 +219,30 @@ api   IN  A   127.0.0.1    ← Nginx #1
 api   IN  A   127.0.0.2    ← Nginx #2
 ```
 
-### 2. Nginx 로드밸런싱 (ip_hash)
+### 2. Nginx 정적 리소스 직접 제공 + API 프록시 분리
+
+Nginx가 정적 파일(HTML, CSS, JS)은 **직접 응답**하고, API 요청만 톰캣으로 전달합니다.
+톰캣은 API 처리에만 집중하므로 **톰캣 부하가 감소**합니다.
+
+```nginx
+# 정적 파일 → Nginx가 직접 제공 (톰캣 안 거침)
+location /project/ {
+    alias /usr/share/nginx/html/;
+    expires 7d;
+}
+
+# API 요청만 → 톰캣으로 전달
+location /project/api/ {
+    proxy_pass http://tomcat-servers;
+}
+```
+
+| 요청 경로 | 처리하는 서버 | 비고 |
+|---|---|---|
+| `/project/index.html` | **Nginx** (직접) | 빠름, 톰캣 부하 없음 |
+| `/project/api/stats/region` | **Tomcat** (프록시) | API만 톰캣이 처리 |
+
+### 3. Nginx 로드밸런싱 (ip_hash)
 
 각 Nginx가 톰캣 2대를 바라보며, `ip_hash`로 세션을 유지합니다.
 
@@ -231,7 +254,7 @@ upstream tomcat-servers {
 }
 ```
 
-### 3. DB 읽기/쓰기 분리
+### 4. DB 읽기/쓰기 분리
 
 | API | Method | DataSource | DB 방향 |
 |---|---|---|---|
@@ -240,7 +263,7 @@ upstream tomcat-servers {
 | `/api/stats/region` | `GET` | `getReplicaDataSource()` | 🟢 Replica (읽기) |
 | `/api/customer/grade` | `PUT` | `getMasterDataSource()` | 🔴 Master (쓰기) |
 
-### 4. Server-Side Prepared Statement
+### 5. Server-Side Prepared Statement
 
 ```
 jdbc:mysql://host:port/card_db
@@ -249,7 +272,7 @@ jdbc:mysql://host:port/card_db
   &prepStmtCacheSize=250       ← 최대 250개 SQL 틀 기억
 ```
 
-### 5. InnoDB Cluster (Group Replication)
+### 6. InnoDB Cluster (Group Replication)
 
 | 구성 요소 | 설명 |
 |---|---|
@@ -276,7 +299,9 @@ Woori-FISA_3-Tier-Architecture/
 │           ├── Corefile                # CoreDNS 설정
 │           └── db.woorifisa.com        # DNS Zone (라운드 로빈)
 ├── nginx-config/
-│   └── nginx.conf                      # Nginx 로드밸런서 설정
+│   ├── nginx.conf                      # Nginx 로드밸런서 + 정적/API 분기 설정
+│   └── static/
+│       └── index.html                  # 클라이언트 대시보드 페이지 (Nginx가 직접 제공)
 ├── project/src/main/java/dev/sample/
 │   ├── ApplicationContextListener.java # HikariCP 풀 2개 초기화
 │   ├── controller/
