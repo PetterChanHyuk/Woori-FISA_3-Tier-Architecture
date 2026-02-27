@@ -1,6 +1,6 @@
 # 🏗️ Woori-FISA 3-Tier Architecture
 
-> **Nginx 로드밸런서 + Tomcat 이중화 + MySQL Master/Replica 구조**를 갖춘 3-Tier 웹 아키텍처 프로젝트
+> **DNS 라운드 로빈 + Nginx 이중화 + Tomcat 이중화 + InnoDB Cluster** 를 갖춘 완전한 3-Tier HA(고가용성) 웹 아키텍처
 
 카드 거래 데이터를 기반으로 **연령대별·라이프스테이지별·지역별 소비 통계**를 조회하고, **고객 회원등급을 변경**하는 RESTful API 서버입니다.
 
@@ -14,145 +14,223 @@ flowchart TB
         Browser["Browser / APIDog"]
     end
 
-    subgraph WEB ["⚖️ Web Tier"]
-        Nginx["Nginx<br/>Load Balancer<br/>:80"]
+    subgraph DNS ["🌐 DNS Tier (CoreDNS)"]
+        CoreDNS["CoreDNS<br/>api.woorifisa.com<br/>→ 127.0.0.1 / 127.0.0.2<br/>(Round Robin)"]
     end
 
-    subgraph APP ["🍅 Application Tier"]
-        T1["Tomcat #1 (:8080)<br/>Servlet → Service → DAO<br/>HikariCP Pool (10 conn)"]
-        T2["Tomcat #2 (:8090)<br/>Servlet → Service → DAO<br/>HikariCP Pool (10 conn)"]
+    subgraph WEB ["⚖️ Web Tier (Docker)"]
+        N1["Nginx #1<br/>127.0.0.1:80"]
+        N2["Nginx #2<br/>127.0.0.2:80"]
+    end
+
+    subgraph APP ["🍅 Application Tier (Docker)"]
+        T1["Tomcat #1 (:8080)<br/>Servlet → Service → DAO<br/>HikariCP Pool"]
+        T2["Tomcat #2 (:8090)<br/>Servlet → Service → DAO<br/>HikariCP Pool"]
     end
 
     subgraph DATA ["🗄️ Data Tier (Docker)"]
-        subgraph ROUTER ["� MySQL Router"]
-            R1["Router #1<br/>:6446 (R/W) · :6447 (R/O)"]
-            R2["Router #2<br/>:6446 (R/W) · :6447 (R/O)"]
+        subgraph ROUTER ["MySQL Router"]
+            R1["Router #1"]
+            R2["Router #2"]
         end
-        subgraph CLUSTER ["�️ InnoDB Cluster"]
-            M1["🔴 mysql1<br/>Primary (R/W)"]
-            M2["🟢 mysql2<br/>Secondary (R/O)"]
-            M3["🟢 mysql3<br/>Secondary (R/O)"]
+        subgraph CLUSTER ["InnoDB Cluster"]
+            M1["🔴 mysql1<br/>Primary (R/W)<br/>:8081"]
+            M2["🟢 mysql2<br/>Secondary (R/O)<br/>:8082"]
+            M3["🟢 mysql3<br/>Secondary (R/O)<br/>:8083"]
         end
     end
 
-    Browser -->|"HTTP Request"| Nginx
-    Nginx -->|"ip_hash 분배"| T1
-    Nginx -->|"ip_hash 분배"| T2
-    T1 -->|"R/W"| R1
-    T2 -->|"R/W"| R2
+    Browser -->|"api.woorifisa.com"| CoreDNS
+    CoreDNS -->|"127.0.0.1"| N1
+    CoreDNS -->|"127.0.0.2"| N2
+    N1 -->|"ip_hash"| T1
+    N1 -->|"ip_hash"| T2
+    N2 -->|"ip_hash"| T1
+    N2 -->|"ip_hash"| T2
+    T1 --> R1
+    T2 --> R2
     R1 -->|"Write"| M1
     R1 -->|"Read"| M2
     R1 -->|"Read"| M3
     R2 -->|"Write"| M1
     R2 -->|"Read"| M2
     R2 -->|"Read"| M3
-    M1 <-.- M2
-    M1 <-.- M3
+    M1 <-.->|"Group Replication"| M2
+    M1 <-.->|"Group Replication"| M3
 ```
+
+### SPOF(단일 장애점) 제거 현황
+
+| 계층 | 구성 | 장애 시나리오 | 결과 |
+|---|---|---|---|
+| **DNS** | CoreDNS (라운드 로빈) | Nginx 1대 장애 | 다른 IP의 Nginx로 자동 분배 |
+| **WEB** | Nginx ×2대 (IP 분리) | Nginx 1대 장애 | 나머지 Nginx가 서비스 유지 |
+| **WAS** | Tomcat ×2대 | Tomcat 1대 장애 | Nginx가 살아있는 Tomcat으로 전환 |
+| **DB** | InnoDB Cluster ×3대 | Primary 장애 | Secondary가 자동 승격 (Failover) |
 
 ---
 
-## 🔄 요청 흐름 (Request Flow)
+## 🚀 실행 방법 (순서대로!)
 
-사용자가 `http://localhost/project/api/stats/age?age=30` 요청을 보냈을 때의 전체 여정:
+> ⚠️ **반드시 아래 순서대로 실행해야 합니다!** (의존성: DB → WAS → WEB → DNS 설정)
 
-```mermaid
-sequenceDiagram
-    participant C as 👤 Client
-    participant N as ⚖️ Nginx (:80)
-    participant T as 🍅 Tomcat (:8080)
-    participant S as 📦 Servlet
-    participant SV as ⚙️ Service
-    participant D as 🗃️ DAO
-    participant H as 🏊 HikariCP
-    participant DB as 🟢 Replica DB
+### STEP 1. DB 클러스터 가동 (MySQL 3대)
 
-    C->>N: GET /project/api/stats/age?age=30
-    N->>T: ip_hash → 8080으로 분배
-    T->>S: URL 매핑 → AgeStatsServlet.doGet()
-    S->>S: getReplicaDataSource() (읽기 분기)
-    S->>SV: StatsService.getStatsByAge("30")
-    SV->>SV: 파라미터 유효성 검증
-    SV->>D: StatsDao.findStatsByAge("30")
-    D->>H: ds.getConnection() (풀에서 대여)
-    H-->>D: Connection 반환
-    D->>DB: PreparedStatement 실행 (Server-Side Prepared)
-    DB-->>D: ResultSet
-    D-->>SV: List<AgeStatsDto>
-    SV-->>S: 결과 전달
-    S-->>T: JSON 응답 생성
-    T-->>N: HTTP Response
-    N-->>C: {"status": "success", "data": [...]}
+```bash
+cd docker/DB
+docker-compose up -d
+```
+
+### STEP 2. InnoDB Cluster 초기화 (최초 1회 또는 전체 재시작 후)
+
+MySQL Shell 컨테이너를 임시로 띄워서 클러스터를 구성합니다.
+
+```bash
+# MySQL Shell 접속
+docker run --rm -it --network inno_cluster_default mysql/mysql-shell:8.0 mysqlsh root@mysql1:8081
+```
+
+**최초 구성 시:**
+```javascript
+// 인스턴스 설정
+dba.configureInstance('root@mysql1:8081')
+dba.configureInstance('root@mysql2:8082')
+dba.configureInstance('root@mysql3:8083')
+
+// 클러스터 생성
+\c root@mysql1:8081
+var cluster = dba.createCluster('sqlCluster', {localAddress: 'mysql1:8081'});
+cluster.addInstance('root@host.docker.internal:8082', {localAddress: 'mysql2:8082'});
+cluster.addInstance('root@host.docker.internal:8083', {localAddress: 'mysql3:8083'});
+cluster.status();
+```
+
+**재시작 후 복구 시:**
+```javascript
+\c root@mysql1:8081
+dba.rebootClusterFromCompleteOutage()
+var cluster = dba.getCluster()
+cluster.status()
+```
+
+### STEP 3. WAS 가동 (Router 2대 + Tomcat 2대)
+
+```bash
+cd docker/WAS
+docker-compose up -d
+```
+
+> 💡 `.war` 파일은 `docker/WAS/` 에 `sample-project1.war`, `sample-project2.war` 이름으로 배치합니다.
+
+### STEP 4. WEB 가동 (Nginx 2대 + CoreDNS)
+
+```bash
+cd docker/WEB
+docker-compose up -d
+```
+
+### STEP 5. 전체 컨테이너 상태 확인
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+
+**기대 결과 (총 10개 컨테이너):**
+
+| 컨테이너 | 포트 | 역할 |
+|---|---|---|
+| `coredns` | :53 (UDP/TCP) | DNS 라운드 로빈 서버 |
+| `nginx1` | 127.0.0.1:**80** | 로드밸런서 #1 |
+| `nginx2` | 127.0.0.2:**80** | 로드밸런서 #2 |
+| `tomcat-app1` | **:8080** | WAS #1 |
+| `tomcat-app2` | **:8090** | WAS #2 |
+| `router1` | - | MySQL Router #1 |
+| `router2` | - | MySQL Router #2 |
+| `mysql1` | **:8081** | DB Primary (R/W) |
+| `mysql2` | **:8082** | DB Secondary (R/O) |
+| `mysql3` | **:8083** | DB Secondary (R/O) |
+
+### STEP 6. Windows DNS 설정 변경
+
+CoreDNS를 내 PC의 기본 DNS 서버로 지정하면, 브라우저/APIDog에서 도메인 이름으로 접근할 수 있습니다.
+
+1. **Windows 설정** → 네트워크 및 인터넷 → 이더넷(또는 Wi-Fi)
+2. **DNS 서버 할당** → 편집 → 수동
+3. 기본 DNS: `127.0.0.1` / 보조 DNS: `8.8.8.8`
+4. 저장
+
+**DNS 라운드 로빈 동작 확인:**
+```bash
+nslookup api.woorifisa.com 127.0.0.1
+# 결과: 127.0.0.1 과 127.0.0.2 두 개의 IP가 반환되면 성공!
+```
+
+> ⚠️ 테스트 후 DNS 설정을 **"자동(DHCP)"**으로 되돌려 주세요.
+
+### STEP 7. API 테스트
+
+```bash
+# 통계 조회 (DNS 라운드 로빈 → Nginx → Tomcat → Replica DB)
+GET http://api.woorifisa.com/project/api/stats/region
+GET http://api.woorifisa.com/project/api/stats/age?age=30
+GET http://api.woorifisa.com/project/api/stats/lifestage?lifeStage=NEW_WED
+
+# 고객 등급 변경 (DNS 라운드 로빈 → Nginx → Tomcat → Master DB)
+PUT http://api.woorifisa.com/project/api/customer/grade
+Body (x-www-form-urlencoded): seq=1001, mbrRk=22
 ```
 
 ---
 
 ## 🧩 핵심 설계 포인트
 
-### 1. Nginx 로드밸런싱 (Web Tier)
+### 1. DNS 라운드 로빈 (CoreDNS)
+
+하나의 도메인에 IP를 2개 등록하여, 요청마다 Nginx 1 → 2 → 1 → 2 순서로 분배합니다.
+
+```
+; DNS Zone 파일 (db.woorifisa.com)
+api   IN  A   127.0.0.1    ← Nginx #1
+api   IN  A   127.0.0.2    ← Nginx #2
+```
+
+### 2. Nginx 로드밸런싱 (ip_hash)
+
+각 Nginx가 톰캣 2대를 바라보며, `ip_hash`로 세션을 유지합니다.
 
 ```nginx
 upstream tomcat-servers {
-    ip_hash;                    # 같은 IP → 항상 같은 서버 (Sticky Session)
-    server 127.0.0.1:8080;
-    server 127.0.0.1:8090;
+    ip_hash;
+    server host.docker.internal:8080;
+    server host.docker.internal:8090;
 }
 ```
-- **`ip_hash`** 알고리즘으로 세션 유지 보장
-- 톰캣 한 대가 장애 나도 나머지 한 대가 서비스 유지
 
-### 2. DB 읽기/쓰기 분리 (Application Tier)
+### 3. DB 읽기/쓰기 분리
 
-| API | HTTP Method | DataSource | DB 방향 |
+| API | Method | DataSource | DB 방향 |
 |---|---|---|---|
 | `/api/stats/age` | `GET` | `getReplicaDataSource()` | 🟢 Replica (읽기) |
 | `/api/stats/lifestage` | `GET` | `getReplicaDataSource()` | 🟢 Replica (읽기) |
 | `/api/stats/region` | `GET` | `getReplicaDataSource()` | 🟢 Replica (읽기) |
 | `/api/customer/grade` | `PUT` | `getMasterDataSource()` | 🔴 Master (쓰기) |
 
-### 3. HikariCP 커넥션 풀 & Server-Side Prepared Statement
+### 4. Server-Side Prepared Statement
 
 ```
 jdbc:mysql://host:port/card_db
-  ?useServerPrepStmts=true    ← SQL 틀을 DB에 미리 등록, ID로 재사용
-  &cachePrepStmts=true        ← Prepare된 ID를 커넥션 내 캐시
-  &prepStmtCacheSize=250      ← 최대 250개 SQL 틀 기억
+  ?useServerPrepStmts=true     ← SQL 틀을 DB에 미리 등록, ID로 재사용
+  &cachePrepStmts=true         ← Prepare된 ID를 캐시
+  &prepStmtCacheSize=250       ← 최대 250개 SQL 틀 기억
 ```
 
-### 4. InnoDB Cluster + MySQL Router (Data Tier)
-
-```mermaid
-flowchart TB
-    subgraph ROUTER ["� MySQL Router (이중화)"]
-        R1["Router #1\n:6446 (R/W) · :6447 (R/O)"]
-        R2["Router #2\n:7446 (R/W) · :7447 (R/O)"]
-    end
-
-    subgraph CLUSTER ["🛡️ InnoDB Cluster (Group Replication)"]
-        M1["🔴 mysql1\nPrimary (R/W)\nserver-id=100"]
-        M2["🟢 mysql2\nSecondary (R/O)\nserver-id=101"]
-        M3["🟢 mysql3\nSecondary (R/O)\nserver-id=102"]
-        M1 <-.-|"Group\nReplication"| M2
-        M1 <-.-|"Group\nReplication"| M3
-    end
-
-    R1 -->|"Write (:6446)"| M1
-    R1 -->|"Read (:6447)"| M2
-    R1 -->|"Read (:6447)"| M3
-    R2 -->|"Write (:7446)"| M1
-    R2 -->|"Read (:7447)"| M2
-    R2 -->|"Read (:7447)"| M3
-```
+### 5. InnoDB Cluster (Group Replication)
 
 | 구성 요소 | 설명 |
 |---|---|
 | **InnoDB Cluster** | 3개 MySQL 노드가 Group Replication으로 자동 동기화 |
-| **MySQL Router** | 애플리케이션 → 클러스터 간 **자동 라우팅** (R/W 분리) |
-| **Automatic Failover** | Primary 장애 시 Secondary가 자동 승격 (수동 개입 불필요) |
-| **GTID 기반 복제** | Global Transaction ID로 복제 위치를 정확히 추적 |
-
-- **Router 포트 규칙**: `:6446` → Primary(쓰기), `:6447` → Secondary(읽기)
-- **Router 이중화**: Router 한 대가 장애 나도 나머지 Router가 요청을 라우팅
+| **MySQL Router** | 애플리케이션 → 클러스터 간 자동 라우팅 (R/W 분리) |
+| **Automatic Failover** | Primary 장애 시 Secondary가 자동 승격 |
 
 ---
 
@@ -160,104 +238,34 @@ flowchart TB
 
 ```
 Woori-FISA_3-Tier-Architecture/
-├── nginx-config/
-│   └── nginx.conf                    # Nginx 로드밸런서 설정
 ├── docker/
-│   └── DB                            
-│       └──docker-compose.yml         # InnoDB Cluster + MySQL Router 컨테이너 정의
-│   └── WAS                           
-│       └──docker-compose.yml         # Tomcat 컨테이너 정의
+│   ├── DB/
+│   │   └── docker-compose.yml          # MySQL 3대 (InnoDB Cluster)
+│   ├── WAS/
+│   │   ├── docker-compose.yml          # Router 2대 + Tomcat 2대
+│   │   ├── sample-project1.war         # Tomcat #1용 WAR
+│   │   └── sample-project2.war         # Tomcat #2용 WAR
+│   └── WEB/
+│       ├── docker-compose.yml          # Nginx 2대 + CoreDNS
+│       └── coredns/
+│           ├── Corefile                # CoreDNS 설정
+│           └── db.woorifisa.com        # DNS Zone (라운드 로빈)
+├── nginx-config/
+│   └── nginx.conf                      # Nginx 로드밸런서 설정
 ├── project/src/main/java/dev/sample/
-│   ├── ApplicationContextListener.java   # HikariCP 풀 2개 초기화
+│   ├── ApplicationContextListener.java # HikariCP 풀 2개 초기화
 │   ├── controller/
 │   │   ├── customer/
-│   │   │   └── CustomerGradeServlet.java # PUT - 고객등급 변경 (Master)
+│   │   │   └── CustomerGradeServlet.java   # PUT - 고객등급 변경
 │   │   └── stats/
-│   │       ├── AgeStatsServlet.java      # GET - 연령대별 통계 (Replica)
-│   │       ├── LifestageStatsServlet.java# GET - 라이프스테이지별 (Replica)
-│   │       └── RegionStatsServlet.java   # GET - 지역별 통계 (Replica)
-│   ├── service/
-│   │   ├── CustomerService.java          # 고객 비즈니스 로직
-│   │   └── StatsService.java             # 통계 비즈니스 로직 + 유효성 검증
-│   ├── dao/
-│   │   ├── CustomerDao.java              # 고객 DB 접근 (PreparedStatement)
-│   │   └── StatsDao.java                 # 통계 DB 접근 (PreparedStatement)
-│   ├── dto/                              # 데이터 전송 객체 (Lombok @Builder)
-│   └── util/
-│       └── JsonResponseUtil.java         # JSON 응답 유틸리티
-└── libraries/                            # JAR 라이브러리 (HikariCP, MySQL 등)
-```
-
----
-
-## 🚀 실행 방법
-
-### 1단계: DB 환경 구축 (Docker + InnoDB Cluster)
-/docker/DB에서 docker-compose.yml을 실행한다.
-
-```bash
-# DB 컨테이너 실행
-docker-compose up
-```
-PRIMARY가 될 MySQL 컨테이너의 MySQL Shell로 접속한다.
-```bash
-# MySQL Shell 접속
-docker exec -it mysql1 mysqlsh root@mysql1:8081
-```
-인스턴스를 설정하고 클러스터링을 수행한다.
-```javascript
-// MySQL Shell
-
-// 1) 인스턴스 설정
-dba.configureInstance('root@mysql1:8081')
-dba.configureInstance('root@mysql2:8082')
-dba.configureInstance('root@mysql3:8083')
-
-// 2) 재부팅
-\c root@mysql1:8081
-
-// 3) 클러스터 생성
-var cluster = dba.createCluster('sqlCluster', {localAddress: 'mysql1:8081'});
-
-// 4) 노드 추가
-cluster.addInstance('root@host.docker.internal:8082', {localAddress: 'mysql2:8082'});
-cluster.addInstance('root@host.docker.internal:8083', {localAddress: 'mysql3:8083'});
-
-// 5) 클러스터 상태 확인
-cluster.status();
-```
-
-### 2단계: Tomcat 서버 및 MySQL Router 실행 (IDE)
-
-이클립스에서 프로젝트를 빌드한 `.war` 파일을 /docker/WAS/에 넣는다.
-`ApplicationContextListener.java`에서 아래 부분의 router의 순서를 변경하여 빌드를 수행해야 한다.
-각 파일의 이름은 `sample-project1.war`와 `sample-project2.war`로 변경한다.
-```java
-masterConfig.setJdbcUrl("jdbc:mysql://router1:6447,router2:6447...");
-```
-/docker/WAS에서 docker-compose.yml을 실행한다.
-```bash
-# WAS 컨테이너 실행
-docker-compose up
-```
-
-
-### 3단계: Nginx 로드밸런서 실행
-
-```bash
-nginx -p "<Nginx 설치 경로>\" -c "<프로젝트 경로>\nginx-config\nginx.conf"
-```
-### 4단계: API 테스트
-
-```bash
-# 통계 조회 (Nginx 경유 → Replica DB)
-GET http://localhost/project/api/stats/age?age=30
-GET http://localhost/project/api/stats/lifestage?lifeStage=NEW_WED
-GET http://localhost/project/api/stats/region
-
-# 고객 등급 변경 (Nginx 경유 → Master DB)
-PUT http://localhost/project/api/customer/grade
-Body (x-www-form-urlencoded): seq=1001, mbrRk=22
+│   │       ├── AgeStatsServlet.java        # GET - 연령대별 통계
+│   │       ├── LifestageStatsServlet.java  # GET - 라이프스테이지별
+│   │       └── RegionStatsServlet.java     # GET - 지역별 통계
+│   ├── service/                        # 비즈니스 로직 + 유효성 검증
+│   ├── dao/                            # DB 접근 (PreparedStatement)
+│   ├── dto/                            # 데이터 전송 객체 (Lombok)
+│   └── util/                           # JSON 응답 유틸리티
+└── libraries/                          # JAR 라이브러리
 ```
 
 ---
@@ -266,20 +274,12 @@ Body (x-www-form-urlencoded): seq=1001, mbrRk=22
 
 | 계층 | 기술 | 역할 |
 |---|---|---|
-| Web Tier | **Nginx 1.28** | 로드밸런싱, 리버스 프록시 |
-| App Tier | **Apache Tomcat 9.0** | 서블릿 컨테이너 (×2대) |
-| App Tier | **Java 17 + Servlet API** | RESTful API 비즈니스 로직 |
-| App Tier | **HikariCP** | JDBC 커넥션 풀 관리 |
-| App Tier | **Lombok** | 보일러플레이트 코드 제거 |
-| App Tier | **Logback (SLF4J)** | 애플리케이션 로깅 |
-| Data Tier | **MySQL 8.0 (Docker)** | RDBMS (Master + Replica) |
-
----
-
-## 👥 팀원
-
-| 이름 | 역할 |
-|---|---|
-| **팀원 A** | DB 이중화 설정 (`docker-compose.yml`, `setup.sh`) |
-| **팀원 B** | Nginx 로드밸런서 설정 (`nginx.conf`) |
-| **팀원 C** | 애플리케이션 코드 (Servlet, Service, DAO, HikariCP 이중화) |
+| DNS | **CoreDNS 1.12** | DNS 라운드 로빈 (SPOF 제거) |
+| Web | **Nginx 1.28 ×2대** | 로드밸런싱, 리버스 프록시 |
+| App | **Tomcat 9.0 ×2대** | 서블릿 컨테이너 |
+| App | **Java 17 + Servlet API** | RESTful API |
+| App | **HikariCP** | JDBC 커넥션 풀 |
+| App | **Lombok + Logback** | 코드 생산성 + 로깅 |
+| Data | **MySQL 8.0 ×3대** | InnoDB Cluster (Group Replication) |
+| Data | **MySQL Router ×2대** | 자동 R/W 라우팅 |
+| Infra | **Docker Compose** | 컨테이너 오케스트레이션 |
