@@ -325,6 +325,12 @@ jdbc:mysql://host:port/card_db
 | **MySQL Router** | 애플리케이션 → 클러스터 간 자동 라우팅 (R/W 분리) |
 | **Automatic Failover** | Primary 장애 시 Secondary가 자동 승격 |
 
+#### 🛡️ 기존 복제(Master-Slave)와의 차별점: 무손실 복제
+과거의 비동기 방식(Primary가 Binlog에 기록 후 끝내고, Secondary가 Relay Log로 모방하는 방식)은 Primary가 다운될 경우 데이터 유실의 위험이 컸습니다.
+저희가 도입한 **Group Replication**은 **분산 합의 알고리즘(Paxos)**과 **GTID(글로벌 트랜잭션 식별자)**를 활용합니다.
+* Primary가 하드디스크에 데이터를 쓰기 전에, Secondary 노드들에게 **"나 이거 쓴다?" 하고 사전 동의(Certification)**를 구합니다.
+* 다수의 노드(Majority)가 승인해야만 커밋을 완료하는 구조이므로, **Primary 노드가 불의의 사고로 다운되더라도 데이터 유실이 0%인 완벽한 무손실(Lossless) 복제** 아키텍처를 자랑합니다.
+* Primary 장애 시 관리자의 수동 개입 없이, 남은 Secondary들이 GTID를 비교하여 즉시 새로운 Primary를 선출하는 **Auto Failover**가 동작합니다!
 
 ### 7. 데이터베이스 테이블 및 성능 최적화(인덱스)
 
