@@ -11,62 +11,68 @@
 ```mermaid
 flowchart TB
     subgraph CLIENT ["👤 Client Tier"]
-        Browser["Browser / APIDog"]
+        Browser["🌍 Browser / APIDog"]
     end
 
-    subgraph DNS ["🌐 DNS Tier (CoreDNS)"]
-        CoreDNS["CoreDNS<br/>api.woorifisa.com<br/>→ 127.0.0.1 / 127.0.0.2<br/>(Round Robin)"]
+    subgraph DNS ["🌐 DNS Tier"]
+        CoreDNS["CoreDNS<br/>api.woorifisa.com → Round Robin"]
     end
 
-    subgraph WEB ["⚖️ Web Tier (Docker)"]
-        N1["Nginx #1<br/>127.0.0.1:80"]
-        N2["Nginx #2<br/>127.0.0.2:80"]
+    subgraph WEB ["⚖️ Web Tier — Nginx ×2"]
+        direction LR
+        N1["Nginx #1<br/>127.0.0.1:80<br/>Static + Proxy"]
+        N2["Nginx #2<br/>127.0.0.2:80<br/>Static + Proxy"]
     end
 
-    subgraph APP ["🍅 Application Tier (Docker)"]
-        T1["Tomcat #1 (:8080)<br/>Redisson(Redis)<br/>HikariCP Pool"]
-        T2["Tomcat #2 (:8090)<br/>Redisson(Redis)<br/>HikariCP Pool"]
+    subgraph APP ["🍅 WAS Tier — Tomcat ×2"]
+        direction LR
+        T1["Tomcat #1 :8080<br/>Servlet · Service · DAO<br/>HikariCP Pool"]
+        T2["Tomcat #2 :8090<br/>Servlet · Service · DAO<br/>HikariCP Pool"]
     end
 
-    subgraph SESSION ["🛒 Session Tier (Docker)"]
-        Redis["Redis Session<br/>:6379"]
+    subgraph SESSION ["� Session Tier"]
+        Redis["Redis :6379<br/>세션 클러스터링"]
     end
 
-    subgraph DATA ["🗄️ Data Tier (Docker)"]
-        subgraph ROUTER ["MySQL Router"]
-            R1["Router #1"]
-            R2["Router #2"]
+    subgraph DATA ["🗄️ Data Tier"]
+        subgraph ROUTER ["MySQL Router ×2"]
+            direction LR
+            R1["Router #1<br/>:6446 Read · :6447 Write"]
+            R2["Router #2<br/>:6446 Read · :6447 Write"]
         end
-        subgraph CLUSTER ["InnoDB Cluster"]
-            M1["🔴 mysql1<br/>Primary (R/W)<br/>:8081"]
-            M2["🟢 mysql2<br/>Secondary (R/O)<br/>:8082"]
-            M3["🟢 mysql3<br/>Secondary (R/O)<br/>:8083"]
+        subgraph CLUSTER ["InnoDB Cluster (Group Replication · GTID)"]
+            direction LR
+            M1["🔴 mysql1<br/>Primary R/W<br/>:8081"]
+            M2["🟢 mysql2<br/>Secondary R/O<br/>:8082"]
+            M3["🟢 mysql3<br/>Secondary R/O<br/>:8083"]
         end
     end
 
     Browser -->|"api.woorifisa.com"| CoreDNS
     CoreDNS -->|"127.0.0.1"| N1
     CoreDNS -->|"127.0.0.2"| N2
-    N1 -->|"/project/api/*"| T1
-    N1 -->|"/project/api/*"| T2
-    N1 -.->|"/project/* (Static)"| N1
-    N2 -->|"/project/api/*"| T1
-    N2 -->|"/project/api/*"| T2
-    N2 -.->|"/project/* (Static)"| N2
-    T1 -.->|"Session"| Redis
-    T2 -.->|"Session"| Redis
+
+    N1 -->|"Round Robin"| T1
+    N1 -->|"Round Robin"| T2
+    N2 -->|"Round Robin"| T1
+    N2 -->|"Round Robin"| T2
+
+    T1 <-.->|"Session R/W"| Redis
+    T2 <-.->|"Session R/W"| Redis
+
     T1 --> R1
     T2 --> R2
-    R1 -->|"Write"| M1
-    R1 -->|"Read"| M2
-    R1 -->|"Read"| M3
-    R2 -->|"Write"| M1
-    R2 -->|"Read"| M2
-    R2 -->|"Read"| M3
-    M1 <-.->|"Group Replication"| M2
-    M1 <-.->|"Group Replication"| M3
-```
 
+    R1 -->|"Write :6447"| M1
+    R1 -->|"Read :6446"| M2
+    R1 -->|"Read :6446"| M3
+    R2 -->|"Write :6447"| M1
+    R2 -->|"Read :6446"| M2
+    R2 -->|"Read :6446"| M3
+
+    M1 <-..->|"Replication"| M2
+    M1 <-..->|"Replication"| M3
+```
 ### SPOF(단일 장애점) 제거 및 고가용성 현황
 
 | 계층 | 구성 | 장애 시나리오 | 결과 |
