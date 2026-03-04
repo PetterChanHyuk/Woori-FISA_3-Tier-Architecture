@@ -7,12 +7,12 @@ import java.net.URLDecoder;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.sql.DataSource;
 
 import dev.sample.ApplicationContextListener;
 import dev.sample.dto.CustomerGradeDto;
@@ -29,6 +29,19 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class CustomerGradeServlet extends HttpServlet {
 
+    private CustomerService customerService;
+
+    @Override
+    public void init(ServletConfig config) throws ServletException {
+        super.init(config);
+
+        // ★ 핵심 변경: 매 요청마다 new CustomerService(ds)를 하던 것을
+        // init()에서 단 1번만 스프링 컨테이너에서 꺼내어 재사용합니다!
+        customerService = ApplicationContextListener
+                .getSpringContext(config.getServletContext())
+                .getBean(CustomerService.class);
+    }
+
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
@@ -42,16 +55,12 @@ public class CustomerGradeServlet extends HttpServlet {
         log.info("PUT /api/customer/grade - seq={}, mbrRk={}", seq, mbrRk);
 
         try {
-            // 회원등급 변경(UPDATE)은 Master(쓰기) DB 연동
-            DataSource ds = ApplicationContextListener.getMasterDataSource(getServletContext());
-            CustomerService service = new CustomerService(ds);
-
             CustomerGradeDto dto = CustomerGradeDto.builder()
                     .seq(seq)
                     .mbrRk(mbrRk)
                     .build();
 
-            int updatedRows = service.updateCustomerGrade(dto);
+            int updatedRows = customerService.updateCustomerGrade(dto);
 
             if (updatedRows == 0) {
                 JsonResponseUtil.sendError(resp, 404, "해당 고객번호를 찾을 수 없습니다: " + seq);

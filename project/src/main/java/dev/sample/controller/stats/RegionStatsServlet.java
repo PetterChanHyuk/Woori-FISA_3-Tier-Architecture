@@ -4,12 +4,12 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.sql.DataSource;
 
 import dev.sample.ApplicationContextListener;
 import dev.sample.dto.RegionStatsDto;
@@ -19,12 +19,23 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * 지역별 카드 이용금액 순위 API
- * POST /api/stats/region 대신 GET 방식 사용
  * GET /api/stats/region
  */
 @WebServlet("/api/stats/region")
 @Slf4j
 public class RegionStatsServlet extends HttpServlet {
+
+    private StatsService statsService;
+
+    @Override
+    public void init(ServletConfig config) throws ServletException {
+        super.init(config);
+
+        // ★ 스프링 컨테이너에서 StatsService 빈을 꺼내옵니다.
+        statsService = ApplicationContextListener
+                .getSpringContext(config.getServletContext())
+                .getBean(StatsService.class);
+    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
@@ -34,11 +45,7 @@ public class RegionStatsServlet extends HttpServlet {
         log.info("GET /api/stats/region");
 
         try {
-            // 통계 조회(SELECT)는 Replica(읽기) DB 연동
-            DataSource ds = ApplicationContextListener.getReplicaDataSource(getServletContext());
-            StatsService service = new StatsService(ds);
-
-            List<RegionStatsDto> result = service.getStatsByRegion();
+            List<RegionStatsDto> result = statsService.getStatsByRegion();
 
             // JSON 변환
             StringBuilder json = new StringBuilder("[");

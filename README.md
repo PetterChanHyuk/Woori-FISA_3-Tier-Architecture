@@ -1,8 +1,10 @@
 # 🏗️ Woori-FISA 3-Tier Architecture
 
-> **DNS 라운드 로빈 + Nginx 이중화 + Tomcat 이중화 + InnoDB Cluster** 를 갖춘 완전한 3-Tier HA(고가용성) 웹 아키텍처
+> **DNS 라운드 로빈 + Nginx 이중화 + Tomcat 이중화 + InnoDB Cluster** 기반의 완전한 무중단(Zero-Downtime) 3-Tier HA(고가용성) 웹 아키텍처
 
-카드 거래 데이터를 기반으로 **연령대별·라이프스테이지별·지역별 소비 통계**를 조회하고, **고객 회원등급을 변경**하는 RESTful API 서버입니다.
+**특정 계층(Tier) 서버가 다운되더라도 서비스가 중단되지 않는 자동 우회(Auto Failover)**와, **장애 서버가 고쳐져 재기동되면 즉시 트래픽 흐름을 원상 복원하는 자동 복구(Auto Failback)** 생태계를 모든 구간에 걸쳐 구축하여 단일 장애점(SPOF)을 처음부터 끝까지 제거했습니다.
+
+이러한 인프라를 바탕으로 현업 수준의 대용량 데이터(약 1,000만 건)를 인덱싱하여 **연령대별·라이프스테이지별·지역별 소비 통계**를 지연 없이 조회하고, **Redis 기반의 강력한 세션 통제 하에 고객 회원등급을 안전하게 변경**하는 RESTful API 서버입니다.
 
 ---
 
@@ -11,60 +13,67 @@
 ```mermaid
 flowchart TB
     subgraph CLIENT ["👤 Client Tier"]
-        Browser["Browser / APIDog"]
+        Browser["🌍 Browser / APIDog"]
     end
 
-    subgraph DNS ["🌐 DNS Tier (CoreDNS)"]
-        CoreDNS["CoreDNS<br/>api.woorifisa.com<br/>→ 127.0.0.1 / 127.0.0.2<br/>(Round Robin)"]
+    subgraph DNS ["🌐 DNS Tier"]
+        CoreDNS["CoreDNS<br/>api.woorifisa.com → Round Robin"]
     end
 
-    subgraph WEB ["⚖️ Web Tier (Docker)"]
-        N1["Nginx #1<br/>127.0.0.1:80"]
-        N2["Nginx #2<br/>127.0.0.2:80"]
+    subgraph WEB ["⚖️ Web Tier — Nginx ×2"]
+        direction LR
+        N1["Nginx #1<br/>127.0.0.1:80<br/>Static + Proxy"]
+        N2["Nginx #2<br/>127.0.0.2:80<br/>Static + Proxy"]
     end
 
-    subgraph APP ["🍅 Application Tier (Docker)"]
-        T1["Tomcat #1 (:8080)<br/>Redisson(Redis)<br/>HikariCP Pool"]
-        T2["Tomcat #2 (:8090)<br/>Redisson(Redis)<br/>HikariCP Pool"]
+    subgraph APP ["🍅 WAS Tier — Tomcat ×2"]
+        direction LR
+        T1["Tomcat #1 :8080<br/>Servlet · Service · DAO<br/>HikariCP Pool"]
+        T2["Tomcat #2 :8090<br/>Servlet · Service · DAO<br/>HikariCP Pool"]
     end
 
-    subgraph SESSION ["🛒 Session Tier (Docker)"]
-        Redis["Redis Session<br/>:6379"]
+    subgraph SESSION ["� Session Tier"]
+        Redis["Redis :6379<br/>세션 클러스터링"]
     end
 
-    subgraph DATA ["🗄️ Data Tier (Docker)"]
-        subgraph ROUTER ["MySQL Router"]
-            R1["Router #1"]
-            R2["Router #2"]
+    subgraph DATA ["🗄️ Data Tier"]
+        subgraph ROUTER ["MySQL Router ×2"]
+            direction LR
+            R1["Router #1<br/>:6446 Read · :6447 Write"]
+            R2["Router #2<br/>:6446 Read · :6447 Write"]
         end
-        subgraph CLUSTER ["InnoDB Cluster"]
-            M1["🔴 mysql1<br/>Primary (R/W)<br/>:8081"]
-            M2["🟢 mysql2<br/>Secondary (R/O)<br/>:8082"]
-            M3["🟢 mysql3<br/>Secondary (R/O)<br/>:8083"]
+        subgraph CLUSTER ["InnoDB Cluster (Group Replication · GTID)"]
+            direction LR
+            M1["🔴 mysql1<br/>Primary R/W<br/>:8081"]
+            M2["🟢 mysql2<br/>Secondary R/O<br/>:8082"]
+            M3["🟢 mysql3<br/>Secondary R/O<br/>:8083"]
         end
     end
 
     Browser -->|"api.woorifisa.com"| CoreDNS
     CoreDNS -->|"127.0.0.1"| N1
     CoreDNS -->|"127.0.0.2"| N2
-    N1 -->|"/project/api/*"| T1
-    N1 -->|"/project/api/*"| T2
-    N1 -.->|"/project/* (Static)"| N1
-    N2 -->|"/project/api/*"| T1
-    N2 -->|"/project/api/*"| T2
-    N2 -.->|"/project/* (Static)"| N2
-    T1 -.->|"Session"| Redis
-    T2 -.->|"Session"| Redis
+
+    N1 -->|"Round Robin"| T1
+    N1 -->|"Round Robin"| T2
+    N2 -->|"Round Robin"| T1
+    N2 -->|"Round Robin"| T2
+
+    T1 <-.->|"Session R/W"| Redis
+    T2 <-.->|"Session R/W"| Redis
+
     T1 --> R1
     T2 --> R2
-    R1 -->|"Write"| M1
-    R1 -->|"Read"| M2
-    R1 -->|"Read"| M3
-    R2 -->|"Write"| M1
-    R2 -->|"Read"| M2
-    R2 -->|"Read"| M3
-    M1 <-.->|"Group Replication"| M2
-    M1 <-.->|"Group Replication"| M3
+
+    R1 -->|"Write :6447"| M1
+    R1 -->|"Read :6446"| M2
+    R1 -->|"Read :6446"| M3
+    R2 -->|"Write :6447"| M1
+    R2 -->|"Read :6446"| M2
+    R2 -->|"Read :6446"| M3
+
+    M1 <-..->|"Replication"| M2
+    M1 <-..->|"Replication"| M3
 ```
 
 ### SPOF(단일 장애점) 제거 및 고가용성 현황
@@ -319,6 +328,12 @@ jdbc:mysql://host:port/card_db
 | **MySQL Router** | 애플리케이션 → 클러스터 간 자동 라우팅 (R/W 분리) |
 | **Automatic Failover** | Primary 장애 시 Secondary가 자동 승격 |
 
+#### 🛡️ 기존 복제(Master-Slave)와의 차별점: 무손실 복제
+과거의 비동기 방식(Primary가 Binlog에 기록 후 끝내고, Secondary가 Relay Log로 모방하는 방식)은 Primary가 다운될 경우 데이터 유실의 위험이 컸습니다.
+저희가 도입한 **Group Replication**은 **분산 합의 알고리즘(Paxos)**과 **GTID(글로벌 트랜잭션 식별자)**를 활용합니다.
+* Primary가 하드디스크에 데이터를 쓰기 전에, Secondary 노드들에게 **"나 이거 쓴다?" 하고 사전 동의(Certification)**를 구합니다.
+* 다수의 노드(Majority)가 승인해야만 커밋을 완료하는 구조이므로, **Primary 노드가 불의의 사고로 다운되더라도 데이터 유실이 0%인 완벽한 무손실(Lossless) 복제** 아키텍처를 자랑합니다.
+* Primary 장애 시 관리자의 수동 개입 없이, 남은 Secondary들이 GTID를 비교하여 즉시 새로운 Primary를 선출하는 **Auto Failover**가 동작합니다!
 
 ### 7. 데이터베이스 테이블 및 성능 최적화(인덱스)
 

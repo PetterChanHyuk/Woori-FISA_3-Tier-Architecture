@@ -13,10 +13,10 @@ import javax.servlet.http.HttpSession;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import dev.sample.ApplicationContextListener;
 import dev.sample.dto.CustomerDto;
 import dev.sample.dto.LoginRequestDto;
 import dev.sample.service.CustomerService;
-import dev.sample.ApplicationContextListener;
 import dev.sample.util.ResponseUtil;
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,8 +30,13 @@ public class LoginServlet extends HttpServlet {
     @Override
     public void init(ServletConfig config) throws ServletException {
         super.init(config);
-        customerService = new CustomerService(
-                ApplicationContextListener.getMasterDataSource(config.getServletContext()));
+
+        // ★ 핵심 변경: new CustomerService(ds) 삭제!
+        // 스프링 컨테이너에서 이미 조립이 끝난 CustomerService 빈을 꺼내옵니다. (Service Locator 패턴)
+        customerService = ApplicationContextListener
+                .getSpringContext(config.getServletContext())
+                .getBean(CustomerService.class);
+
         objectMapper = new ObjectMapper();
     }
 

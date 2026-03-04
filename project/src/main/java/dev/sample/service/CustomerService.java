@@ -2,7 +2,7 @@ package dev.sample.service;
 
 import java.sql.SQLException;
 
-import javax.sql.DataSource;
+import org.springframework.stereotype.Service;
 
 import dev.sample.dao.CustomerDao;
 import dev.sample.dto.CustomerDto;
@@ -11,9 +11,11 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * 고객 서비스
- * 유효성 검사 후 DAO 호출
+ * - 유효성 검사 후 DAO 호출
+ * - 스프링 컨테이너가 싱글톤 빈으로 관리
  */
 @Slf4j
+@Service
 public class CustomerService {
 
     private final CustomerDao customerDao;
@@ -22,8 +24,11 @@ public class CustomerService {
     private static final java.util.Set<String> VALID_MBR_RK = new java.util.HashSet<>(java.util.Arrays.asList(
             "21", "22", "23", "24", "25"));
 
-    public CustomerService(DataSource ds) {
-        this.customerDao = new CustomerDao(ds);
+    // ★ 핵심 변경: new CustomerDao(ds) 삭제!
+    // 스프링이 이미 만들어 둔 CustomerDao 빈을 생성자 주입(DI)으로 받습니다.
+    // 생성자가 1개이므로 @Autowired 생략 가능 (Spring 4.3+)
+    public CustomerService(CustomerDao customerDao) {
+        this.customerDao = customerDao;
     }
 
     /**

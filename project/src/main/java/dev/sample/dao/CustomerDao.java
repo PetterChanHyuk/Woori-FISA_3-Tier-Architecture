@@ -6,19 +6,27 @@ import java.sql.SQLException;
 
 import javax.sql.DataSource;
 
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Repository;
+
 import dev.sample.dto.CustomerDto;
 import dev.sample.dto.CustomerGradeDto;
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * 고객 정보 DAO
+ * - 쓰기(Master) DataSource를 사용
+ * - 스프링 컨테이너가 싱글톤 빈으로 관리
  */
 @Slf4j
+@Repository
 public class CustomerDao {
 
     private final DataSource ds;
 
-    public CustomerDao(DataSource ds) {
+    // 생성자가 1개이므로 @Autowired 생략 가능 (Spring 4.3+)
+    // @Qualifier로 AppConfig의 masterDataSource 빈을 지정
+    public CustomerDao(@Qualifier("masterDataSource") DataSource ds) {
         this.ds = ds;
     }
 
